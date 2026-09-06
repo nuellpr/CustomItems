@@ -1,0 +1,7 @@
+# Rank tags shown in chat before the player name.
+# PNG goes in plugins/CustomItems/textures/. Player gets a tag via permission ci.rank.<key>.
+# ascent: vertical alignment in chat (8 fits normal text height).
+ranks:
+  admin:
+    texture: admin.png
+    ascent: 8

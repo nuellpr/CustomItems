@@ -7,6 +7,7 @@ public final class CustomItemsPlugin extends JavaPlugin {
     private Items items;
     private Blocks blocks;
     private Mobs mobs;
+    private Ranks ranks;
     private PackBuilder pack;
     private PackServer packServer;
     private GuiMenu gui;
@@ -18,6 +19,7 @@ public final class CustomItemsPlugin extends JavaPlugin {
         items = new Items(this);
         blocks = new Blocks(this);
         mobs = new Mobs(this);
+        ranks = new Ranks(this);
         pack = new PackBuilder(this);
         loadItems();
         try {
@@ -33,6 +35,7 @@ public final class CustomItemsPlugin extends JavaPlugin {
         }
         getServer().getPluginManager().registerEvents(new JoinListener(this), this);
         getServer().getPluginManager().registerEvents(new BlockListener(this), this);
+        getServer().getPluginManager().registerEvents(new ChatListener(this), this);
         gui = new GuiMenu(this);
         getServer().getPluginManager().registerEvents(gui, this);
         getCommand("ci").setExecutor(new GiveCommand(this));
@@ -47,6 +50,7 @@ public final class CustomItemsPlugin extends JavaPlugin {
         items.load();
         blocks.load();
         mobs.load();
+        ranks.load();
     }
 
     public Items items() {
@@ -59,6 +63,10 @@ public final class CustomItemsPlugin extends JavaPlugin {
 
     public Mobs mobs() {
         return mobs;
+    }
+
+    public Ranks ranks() {
+        return ranks;
     }
 
     public org.bukkit.NamespacedKey mobKey() {

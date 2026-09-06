@@ -7,6 +7,7 @@ Plugin Minecraft Paper seperti ItemsAdder: custom items, blocks, mobs, dan GUI m
 - **Custom Items** — tekstur custom via resource pack, nama + lore (MiniMessage)
 - **Custom Blocks** — model custom, tekstur, nama; aman di-break (drop item custom kembali)
 - **Custom Mobs** — vanilla entity dengan custom nama, HP, dan kecepatan
+- **Rank Tags** — tag pixel-art di chat (seperti Better Ranks), via font glyph
 - **GUI Menu** — `/ci menu` lihat semua isi, klik untuk ambil
 - **Resource Pack Otomatis** — plugin generate pack.zip, serve via webserver built-in (port 8077), auto-prompt saat player join
 
@@ -64,6 +65,19 @@ mobs:
     speed: 0.3
 ```
 
+### ranks.yml
+
+```yaml
+ranks:
+  admin:
+    texture: admin.png   # pixel art transparan, tampil sebelum nama di chat
+    ascent: 8            # posisi vertikal glyph (8 = sejajar teks)
+  vip:
+    texture: vip.png
+```
+
+Tag diaktifkan via permission `ci.rank.<key>` (mis. `ci.rank.admin`). Rank pertama yang dimiliki player yang dipakai (urutan sesuai file = prioritas).
+
 Texture PNG ditaruh di `plugins/CustomItems/textures/`, lalu `/ci reload` — pack.zip dibangun ulang otomatis.
 
 ## Perintah
@@ -90,4 +104,5 @@ Butuh Gradle 9.x + Java 21+. Hasil di `build/libs/CustomItems-0.1.0.jar`.
 - Items: `custom_model_data` string + item model definition format 1.21.4+ (`select`)
 - Blocks: noteblock method (instrument + note unik per block, PDC sebagai sumber kebenaran)
 - Mobs: vanilla model + atribut custom (bukan model 3D custom seperti ModelEngine)
+- Rank tags: bitmap font glyph (`\uE000`+) di `font/default.json`, merge aditif dengan vanilla
 - Webserver: `com.sun.net.httpserver`, serve `/pack.zip`

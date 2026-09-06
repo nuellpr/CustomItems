@@ -107,6 +107,27 @@ public final class PackBuilder {
                     }
                 }
             }
+            // rank tags: bitmap font glyphs, merged additively into the default font
+            if (!plugin.ranks().all().isEmpty()) {
+                StringBuilder providers = new StringBuilder();
+                int i = 0;
+                for (Ranks.RankDef def : plugin.ranks().all()) {
+                    if (!providers.isEmpty()) providers.append(',');
+                    providers.append("{\"type\":\"bitmap\",\"file\":\"minecraft:font/rank_")
+                            .append(def.key()).append(".png\",\"ascent\":").append(def.ascent())
+                            .append(",\"height\":").append(def.ascent())
+                            .append(",\"chars\":[\"\\u").append(String.format("%04X", 0xE000 + i)).append("\"]}");
+                    File png = new File(textures, def.texture());
+                    if (png.isFile()) {
+                        putBytes(zip, "assets/minecraft/textures/font/rank_" + def.key() + ".png",
+                                Files.readAllBytes(png.toPath()));
+                    } else {
+                        plugin.getLogger().warning("Missing texture for rank '" + def.key() + "': " + png.getPath());
+                    }
+                    i++;
+                }
+                put(zip, "assets/minecraft/font/default.json", "{\"providers\":[" + providers + "]}");
+            }
         }
         packFile = out;
         sha1 = MessageDigest.getInstance("SHA-1").digest(Files.readAllBytes(out.toPath()));
