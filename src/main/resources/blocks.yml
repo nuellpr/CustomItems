@@ -1,0 +1,5 @@
+# Custom blocks (noteblock-based, texture 16x16 PNG in textures/)
+# Each block gets its own noteblock state (instrument+note) so many blocks are possible.
+marble_block:
+  texture: marble_block.png
+  name: "<white>Marble Block"

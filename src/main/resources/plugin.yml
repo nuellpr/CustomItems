@@ -1,0 +1,12 @@
+name: CustomItems
+version: "${version}"
+main: com.chatbiasa.customitems.CustomItemsPlugin
+api-version: "1.21"
+description: ItemsAdder-style custom items with auto resource pack hosting.
+commands:
+  ci:
+    description: CustomItems command
+    usage: /ci give <item> [player] | /ci spawn <mob> | /ci menu | /ci reload
+permissions:
+  ci.admin:
+    default: op

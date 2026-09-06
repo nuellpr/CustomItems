@@ -1,0 +1,7 @@
+# Custom mobs. Spawn with /ci spawn <key>
+mobs:
+  guardian_zombie:
+    type: ZOMBIE
+    name: "<dark_purple>Guardian"
+    health: 40.0
+    speed: 0.3

@@ -1,0 +1,7 @@
+# Port for the built-in resource pack webserver
+port: 8077
+# Set to your public IP/URL if players connect from outside (e.g. "http://play.myserver.com:8077")
+# Leave empty to use the server's bind IP automatically.
+external-url: ""
+# Resource pack format (46 = 1.21.4-1.21.8, 69 = 1.21.9-1.21.10, 75 = 1.21.11, 84 = 26.1, 88 = 26.2)
+pack-format: 46

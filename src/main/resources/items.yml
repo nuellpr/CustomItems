@@ -1,0 +1,7 @@
+items:
+  ruby_sword:
+    base: DIAMOND_SWORD
+    name: "<red>Ruby Sword"
+    lore:
+      - "<gray>Forged from a ruby."
+    texture: ruby_sword.png
