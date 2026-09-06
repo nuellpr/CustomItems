@@ -1,0 +1,7 @@
+# Custom sounds. Only .ogg files work (convert MP3/WAV → OGG, e.g. with Audacity or ffmpeg).
+# Put the .ogg file in plugins/CustomItems/sounds/ and set file: below.
+sounds:
+  fanfare:
+    file: fanfare.ogg
+    volume: 1.0
+    pitch: 1.0

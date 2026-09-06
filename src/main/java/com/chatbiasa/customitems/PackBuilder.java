@@ -107,26 +107,61 @@ public final class PackBuilder {
                     }
                 }
             }
-            // rank tags: bitmap font glyphs, merged additively into the default font
-            if (!plugin.ranks().all().isEmpty()) {
-                StringBuilder providers = new StringBuilder();
-                int i = 0;
-                for (Ranks.RankDef def : plugin.ranks().all()) {
-                    if (!providers.isEmpty()) providers.append(',');
-                    providers.append("{\"type\":\"bitmap\",\"file\":\"minecraft:font/rank_")
-                            .append(def.key()).append(".png\",\"ascent\":").append(def.ascent())
-                            .append(",\"height\":").append(def.ascent())
-                            .append(",\"chars\":[\"\\u").append(String.format("%04X", 0xE000 + i)).append("\"]}");
-                    File png = new File(textures, def.texture());
-                    if (png.isFile()) {
-                        putBytes(zip, "assets/minecraft/textures/font/rank_" + def.key() + ".png",
-                                Files.readAllBytes(png.toPath()));
-                    } else {
-                        plugin.getLogger().warning("Missing texture for rank '" + def.key() + "': " + png.getPath());
-                    }
-                    i++;
+            // rank tags + emojis: bitmap font glyphs, merged additively into the default font
+            StringBuilder providers = new StringBuilder();
+            int gi = 0;
+            for (Ranks.RankDef def : plugin.ranks().all()) {
+                if (!providers.isEmpty()) providers.append(',');
+                providers.append("{\"type\":\"bitmap\",\"file\":\"minecraft:font/rank_")
+                        .append(def.key()).append(".png\",\"ascent\":").append(def.ascent())
+                        .append(",\"height\":").append(def.ascent())
+                        .append(",\"chars\":[\"\\u").append(String.format("%04X", 0xE000 + gi)).append("\"]}");
+                File png = new File(textures, def.texture());
+                if (png.isFile()) {
+                    putBytes(zip, "assets/minecraft/textures/font/rank_" + def.key() + ".png",
+                            Files.readAllBytes(png.toPath()));
+                } else {
+                    plugin.getLogger().warning("Missing texture for rank '" + def.key() + "': " + png.getPath());
                 }
+                gi++;
+            }
+            int ei = 0;
+            for (Emojis.EmojiDef def : plugin.emojis().all()) {
+                if (!providers.isEmpty()) providers.append(',');
+                providers.append("{\"type\":\"bitmap\",\"file\":\"minecraft:font/emoji_")
+                        .append(def.key()).append(".png\",\"ascent\":").append(def.ascent())
+                        .append(",\"height\":").append(def.ascent())
+                        .append(",\"chars\":[\"\\u").append(String.format("%04X", 0xE100 + ei)).append("\"]}");
+                File png = new File(textures, def.texture());
+                if (png.isFile()) {
+                    putBytes(zip, "assets/minecraft/textures/font/emoji_" + def.key() + ".png",
+                            Files.readAllBytes(png.toPath()));
+                } else {
+                    plugin.getLogger().warning("Missing texture for emoji '" + def.key() + "': " + png.getPath());
+                }
+                ei++;
+            }
+            if (!providers.isEmpty()) {
                 put(zip, "assets/minecraft/font/default.json", "{\"providers\":[" + providers + "]}");
+            }
+            // custom sounds: ogg files + sounds.json registering "custom.<key>"
+            if (!plugin.sounds().all().isEmpty()) {
+                File sndDir = new File(plugin.getDataFolder(), "sounds");
+                if (!sndDir.exists()) sndDir.mkdirs();
+                StringBuilder soundsJson = new StringBuilder();
+                for (Sounds.SoundDef def : plugin.sounds().all()) {
+                    if (!soundsJson.isEmpty()) soundsJson.append(',');
+                    soundsJson.append("\"custom.").append(def.key())
+                            .append("\":{\"sounds\":[\"custom/").append(def.key())
+                            .append("\"],\"category\":\"master\"}");
+                    File ogg = new File(sndDir, def.ogg());
+                    if (ogg.isFile()) {
+                        putBytes(zip, "assets/minecraft/sounds/custom/" + def.key() + ".ogg", Files.readAllBytes(ogg.toPath()));
+                    } else {
+                        plugin.getLogger().warning("Missing sound '" + def.key() + "': " + ogg.getPath());
+                    }
+                }
+                put(zip, "assets/minecraft/sounds.json", "{" + soundsJson + "}");
             }
         }
         packFile = out;

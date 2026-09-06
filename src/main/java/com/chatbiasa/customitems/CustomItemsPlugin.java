@@ -8,6 +8,9 @@ public final class CustomItemsPlugin extends JavaPlugin {
     private Blocks blocks;
     private Mobs mobs;
     private Ranks ranks;
+    private Emojis emojis;
+    private Recipes recipes;
+    private Sounds sounds;
     private PackBuilder pack;
     private PackServer packServer;
     private GuiMenu gui;
@@ -20,6 +23,9 @@ public final class CustomItemsPlugin extends JavaPlugin {
         blocks = new Blocks(this);
         mobs = new Mobs(this);
         ranks = new Ranks(this);
+        emojis = new Emojis(this);
+        recipes = new Recipes(this);
+        sounds = new Sounds(this);
         pack = new PackBuilder(this);
         loadItems();
         try {
@@ -51,6 +57,9 @@ public final class CustomItemsPlugin extends JavaPlugin {
         blocks.load();
         mobs.load();
         ranks.load();
+        emojis.load();
+        recipes.load();
+        sounds.load();
     }
 
     public Items items() {
@@ -67,6 +76,18 @@ public final class CustomItemsPlugin extends JavaPlugin {
 
     public Ranks ranks() {
         return ranks;
+    }
+
+    public Emojis emojis() {
+        return emojis;
+    }
+
+    public Recipes recipes() {
+        return recipes;
+    }
+
+    public Sounds sounds() {
+        return sounds;
     }
 
     public org.bukkit.NamespacedKey mobKey() {

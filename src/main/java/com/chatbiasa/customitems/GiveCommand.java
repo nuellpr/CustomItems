@@ -54,8 +54,26 @@ public final class GiveCommand implements CommandExecutor {
             sender.sendMessage(Component.text("Spawned " + mdef.key()));
             return true;
         }
+        if (args.length >= 1 && args[0].equalsIgnoreCase("play")) {
+            if (args.length < 2) {
+                sender.sendMessage(Component.text("Usage: /" + label + " play <sound>"));
+                return true;
+            }
+            Sounds.SoundDef sdef = plugin.sounds().get(args[1]);
+            if (sdef == null) {
+                sender.sendMessage(Component.text("Unknown sound: " + args[1]));
+                return true;
+            }
+            if (!(sender instanceof Player p)) {
+                sender.sendMessage(Component.text("Players only."));
+                return true;
+            }
+            plugin.sounds().play(p, sdef);
+            sender.sendMessage(Component.text("Playing " + sdef.key()));
+            return true;
+        }
         if (args.length < 2) {
-            sender.sendMessage(Component.text("Usage: /" + label + " give <item> [player] | /" + label + " spawn <mob> | /" + label + " menu | /" + label + " reload"));
+            sender.sendMessage(Component.text("Usage: /" + label + " give <item> [player] | /" + label + " spawn <mob> | /" + label + " play <sound> | /" + label + " menu | /" + label + " reload"));
             return true;
         }
         ItemDef def = plugin.items().get(args[1]);

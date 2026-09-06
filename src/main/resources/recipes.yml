@@ -1,0 +1,21 @@
+# Recipes for custom items/blocks.
+# type: shaped (pattern + ingredients) or shapeless (list of ingredients)
+# result: custom item/block key. Ingredient value: vanilla MATERIAL name,
+# or custom item/block key (lowercase, matched via ExactChoice).
+recipes:
+  ruby_sword:
+    type: shaped
+    result: ruby_sword
+    pattern:
+      - " D "
+      - " D "
+      - " S "
+    ingredients:
+      D: DIAMOND
+      S: STICK
+  marble_block:
+    type: shapeless
+    result: marble_block
+    ingredients:
+      - STONE
+      - CLAY_BALL

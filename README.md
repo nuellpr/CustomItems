@@ -8,6 +8,9 @@ Plugin Minecraft Paper seperti ItemsAdder: custom items, blocks, mobs, dan GUI m
 - **Custom Blocks** — model custom, tekstur, nama; aman di-break (drop item custom kembali)
 - **Custom Mobs** — vanilla entity dengan custom nama, HP, dan kecepatan
 - **Rank Tags** — tag pixel-art di chat (seperti Better Ranks), via font glyph
+- **Emojis** — ketik `:smile:` di chat, otomatis jadi gambar emoji (font glyph)
+- **Custom Recipes** — crafting recipe untuk item/block custom (shaped & shapeless)
+- **Custom Sounds** — mainkan suara .ogg sendiri via resource pack
 - **GUI Menu** — `/ci menu` lihat semua isi, klik untuk ambil
 - **Resource Pack Otomatis** — plugin generate pack.zip, serve via webserver built-in (port 8077), auto-prompt saat player join
 
@@ -27,7 +30,7 @@ Salah angka tetap jalan, hanya muncul confirm prompt "incompatible" saat pemain 
 
 ## Install
 
-1. Download `CustomItems-0.1.0.jar` dari [Releases](../../releases), taruh di folder `plugins/`
+1. Download `CustomItems-0.2.0.jar` dari [Releases](../../releases), taruh di folder `plugins/`
 2. Start server → folder `plugins/CustomItems/` tergenerate
 3. Untuk server online: set `external-url` di `config.yml` ke IP/URL publik (mis. `http://play.myserver.com:8077`) dan buka port-nya
 4. `/ci reload`
@@ -78,6 +81,48 @@ ranks:
 
 Tag diaktifkan via permission `ci.rank.<key>` (mis. `ci.rank.admin`). Rank pertama yang dimiliki player yang dipakai (urutan sesuai file = prioritas).
 
+### emojis.yml
+
+```yaml
+emojis:
+  smile:
+    texture: smile.png   # tampil saat player ketik :smile: di chat
+    ascent: 8
+```
+
+Ketik `:smile:` (nama key dibatasi `:`) di chat → otomatis diganti glyph emoji.
+
+### recipes.yml
+
+```yaml
+recipes:
+  ruby_sword:
+    type: shaped
+    result: ruby_sword
+    pattern: [" D ", " D ", " S "]
+    ingredients:
+      D: DIAMOND
+      S: STICK
+  marble_block:
+    type: shapeless
+    result: marble_block
+    ingredients: [STONE, CLAY_BALL]
+```
+
+Ingredient bisa material vanilla ATAU key item/block custom.
+
+### sounds.yml
+
+```yaml
+sounds:
+  fanfare:
+    file: fanfare.ogg   # hanya .ogg (MP3/WAV convert dulu via Audacity/ffmpeg)
+    volume: 1.0
+    pitch: 1.0
+```
+
+File .ogg ditaruh di `plugins/CustomItems/sounds/`, mainkan via `/ci play fanfare`.
+
 Texture PNG ditaruh di `plugins/CustomItems/textures/`, lalu `/ci reload` — pack.zip dibangun ulang otomatis.
 
 ## Perintah
@@ -86,6 +131,7 @@ Texture PNG ditaruh di `plugins/CustomItems/textures/`, lalu `/ci reload` — pa
 |---|---|
 | `/ci give <item> [player]` | Beri item custom |
 | `/ci spawn <mob>` | Spawn mob custom |
+| `/ci play <sound>` | Mainkan sound custom |
 | `/ci menu` | Buka GUI semua isi |
 | `/ci reload` | Reload config + rebuild pack |
 
@@ -97,7 +143,7 @@ Semua butuh permission `ci.admin` (default: op).
 gradle build
 ```
 
-Butuh Gradle 9.x + Java 21+. Hasil di `build/libs/CustomItems-0.1.0.jar`.
+Butuh Gradle 9.x + Java 21+. Hasil di `build/libs/CustomItems-0.2.0.jar`.
 
 ## Catatan teknis
 
@@ -105,4 +151,7 @@ Butuh Gradle 9.x + Java 21+. Hasil di `build/libs/CustomItems-0.1.0.jar`.
 - Blocks: noteblock method (instrument + note unik per block, PDC sebagai sumber kebenaran)
 - Mobs: vanilla model + atribut custom (bukan model 3D custom seperti ModelEngine)
 - Rank tags: bitmap font glyph (`\uE000`+) di `font/default.json`, merge aditif dengan vanilla
+- Emojis: glyph range terpisah (`\uE100`+), trigger `:key:` di chat
+- Recipes: Bukkit native, ingredient custom dicocokkan via PDC (ExactChoice)
+- Sounds: `sounds.json` custom, key namespace `custom.<nama>`
 - Webserver: `com.sun.net.httpserver`, serve `/pack.zip`
