@@ -1,7 +1,10 @@
 # Port for the built-in resource pack webserver
 port: 8077
-# Set to your public IP/URL if players connect from outside (e.g. "http://play.myserver.com:8077")
-# Leave empty to use the server's bind IP automatically.
+# REQUIRED for any server players join over the network.
+# Set this to the address players can actually reach, e.g. "http://play.myserver.com:8077"
+# or "http://203.0.113.10:8077". Leave empty only for a purely local/singleplayer test —
+# the plugin then falls back to the server bind IP and warns, because 0.0.0.0 is not
+# an address a client can download from.
 external-url: ""
 # Resource pack format (46 = 1.21.4-1.21.8, 69 = 1.21.9-1.21.10, 75 = 1.21.11, 84 = 26.1, 88 = 26.2)
 pack-format: 46

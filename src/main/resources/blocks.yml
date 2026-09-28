@@ -1,5 +1,9 @@
 # Custom blocks (noteblock-based, texture 16x16 PNG in textures/)
 # Each block gets its own noteblock state (instrument+note) so many blocks are possible.
-marble_block:
-  texture: marble_block.png
-  name: "<white>Marble Block"
+# NOTE: a placed noteblock stores its identity in the blockstate itself — there is no
+# block entity to hold custom data. Do not change a custom block's instrument/note in
+# this file after players have built with it; existing blocks would change appearance.
+blocks:
+  marble_block:
+    texture: marble_block.png
+    name: "<white>Marble Block"

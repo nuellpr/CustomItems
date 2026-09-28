@@ -11,6 +11,9 @@ import org.bukkit.inventory.ItemStack;
 
 public final class GuiMenu implements InventoryHolder, Listener {
 
+    /** largest chest inventory the server accepts */
+    private static final int MAX_SIZE = 54;
+
     private final CustomItemsPlugin plugin;
     private Inventory inv;
 
@@ -20,10 +23,21 @@ public final class GuiMenu implements InventoryHolder, Listener {
 
     public void open(Player player) {
         int count = plugin.items().all().size() + plugin.blocks().all().size();
-        int size = Math.max(9, ((count - 1) / 9 + 1) * 9);
+        // createInventory throws above 54 slots; clamp so /ci menu can never hard-error.
+        int size = Math.min(MAX_SIZE, Math.max(9, ((count - 1) / 9 + 1) * 9));
+        if (count > MAX_SIZE) {
+            plugin.getLogger().warning("/ci menu shows only the first " + MAX_SIZE + " of " + count
+                    + " entries; raise the GUI limit by adding paging.");
+        }
         inv = plugin.getServer().createInventory(this, size, Component.text("CustomItems"));
-        for (ItemDef def : plugin.items().all()) inv.addItem(plugin.items().stack(def));
-        for (Blocks.BlockDef def : plugin.blocks().all()) inv.addItem(plugin.blocks().stack(def));
+        for (ItemDef def : plugin.items().all()) {
+            if (inv.firstEmpty() < 0) break;
+            inv.addItem(plugin.items().stack(def));
+        }
+        for (Blocks.BlockDef def : plugin.blocks().all()) {
+            if (inv.firstEmpty() < 0) break;
+            inv.addItem(plugin.blocks().stack(def));
+        }
         player.openInventory(inv);
     }
 

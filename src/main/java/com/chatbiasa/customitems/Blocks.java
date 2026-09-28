@@ -17,7 +17,22 @@ import java.util.Map;
 
 public final class Blocks {
 
-    // {blockstate json name, Bukkit enum} pairs, assignment order; harp excluded (most likely vanilla collision)
+    /**
+     * Every noteblock blockstate instrument name mapped to its Bukkit enum name. The blockstate
+     * file we ship REPLACES the vanilla note_block.json, so all of these must be emitted or the
+     * missing ones (harp/piano above all) render as a missing model — i.e. invisible note blocks.
+     */
+    static final String[][] ALL_INSTRUMENTS = {
+            {"harp", "PIANO"}, {"basedrum", "BASS_DRUM"}, {"snare", "SNARE_DRUM"}, {"hat", "STICKS"},
+            {"bass", "BASS_GUITAR"}, {"flute", "FLUTE"}, {"bell", "BELL"}, {"guitar", "GUITAR"},
+            {"chime", "CHIME"}, {"xylophone", "XYLOPHONE"}, {"iron_xylophone", "IRON_XYLOPHONE"},
+            {"cow_bell", "COW_BELL"}, {"didgeridoo", "DIDGERIDOO"}, {"bit", "BIT"}, {"banjo", "BANJO"},
+            {"pling", "PLING"}, {"zombie", "ZOMBIE"}, {"skeleton", "SKELETON"}, {"creeper", "CREEPER"},
+            {"dragon", "DRAGON"}, {"wither_skeleton", "WITHER_SKELETON"}, {"piglin", "PIGLIN"},
+            {"custom_head", "CUSTOM_HEAD"}
+    };
+
+    // instruments custom blocks are assigned from; harp excluded (a plain noteblock uses it by default)
     static final String[][] INSTRUMENTS = {
             {"banjo", "BANJO"}, {"didgeridoo", "DIDGERIDOO"}, {"pling", "PLING"},
             {"bit", "BIT"}, {"cow_bell", "COW_BELL"}, {"bell", "BELL"},
@@ -30,6 +45,8 @@ public final class Blocks {
     private final CustomItemsPlugin plugin;
     private final NamespacedKey pdcKey;
     private final Map<String, BlockDef> byKey = new LinkedHashMap<>();
+    /** "instrument:note" -> def. A noteblock has no block entity, so its blockstate IS the identity. */
+    private final Map<String, BlockDef> byState = new LinkedHashMap<>();
 
     public Blocks(CustomItemsPlugin plugin) {
         this.plugin = plugin;
@@ -38,20 +55,45 @@ public final class Blocks {
 
     public void load() {
         byKey.clear();
+        byState.clear();
         if (!new File(plugin.getDataFolder(), "blocks.yml").exists()) plugin.saveResource("blocks.yml", false);
         YamlConfiguration yml = YamlConfiguration.loadConfiguration(new File(plugin.getDataFolder(), "blocks.yml"));
+        // accept both a "blocks:" wrapper (as documented in the README) and bare root-level keys
+        ConfigurationSection root = yml.getConfigurationSection("blocks");
+        if (root == null) root = yml;
         int i = 0;
-        for (String key : yml.getKeys(false)) {
-            ConfigurationSection s = yml.getConfigurationSection(key);
+        for (String key : root.getKeys(false)) {
+            ConfigurationSection s = root.getConfigurationSection(key);
             if (s == null) continue;
             String[] inst = INSTRUMENTS[i % INSTRUMENTS.length];
             int note = (i / INSTRUMENTS.length) % 25;
-            byKey.put(key, new BlockDef(key, s.getString("texture", key + ".png"),
+            String lower = key.toLowerCase();
+            BlockDef def = new BlockDef(lower, s.getString("texture", lower + ".png"),
                     MiniMessage.miniMessage().deserialize(s.getString("name", "<white>" + key)),
-                    inst[0], note));
+                    inst[0], note);
+            byKey.put(lower, def);
+            byState.put(inst[0] + ":" + note, def);
             i++;
         }
         plugin.getLogger().info("Loaded " + byKey.size() + " custom blocks");
+    }
+
+    /** blockstate instrument name for a Bukkit Instrument, e.g. PIANO -> harp */
+    public static String stateName(org.bukkit.Instrument instrument) {
+        for (String[] pair : ALL_INSTRUMENTS) {
+            if (pair[1].equals(instrument.name())) return pair[0];
+        }
+        return "harp";
+    }
+
+    /** custom block matching instrument+note, or null */
+    public BlockDef byState(String instrument, int note) {
+        return byState.get(instrument + ":" + note);
+    }
+
+    /** custom block a placed noteblock currently represents, or null */
+    public BlockDef byNoteBlock(org.bukkit.block.data.type.NoteBlock nb) {
+        return byState(stateName(nb.getInstrument()), nb.getNote().getId());
     }
 
     public BlockDef get(String key) {
@@ -75,11 +117,5 @@ public final class Blocks {
     public String id(ItemStack st) {
         if (st == null || !st.hasItemMeta()) return null;
         return st.getItemMeta().getPersistentDataContainer().get(pdcKey, PersistentDataType.STRING);
-    }
-
-    /** custom block key stored on a placed block's tile state, or null */
-    public String idOf(org.bukkit.block.BlockState state) {
-        if (!(state instanceof org.bukkit.block.TileState ts)) return null;
-        return ts.getPersistentDataContainer().get(pdcKey, PersistentDataType.STRING);
     }
 }

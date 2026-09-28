@@ -64,11 +64,13 @@ public final class PackBuilder {
                     }
                 }
             }
-            // custom blocks hijack noteblock states: one blockstate file covering ALL combos
+            // custom blocks hijack noteblock states: one blockstate file covering ALL combos.
+            // This file REPLACES the vanilla note_block.json, so every instrument/note/powered
+            // combination must be present or the untouched ones lose their model (invisible blocks).
             if (!plugin.blocks().all().isEmpty()) {
                 List<Blocks.BlockDef> blocks = plugin.blocks().all();
                 StringBuilder variants = new StringBuilder();
-                for (String[] inst : Blocks.INSTRUMENTS) {
+                for (String[] inst : Blocks.ALL_INSTRUMENTS) {
                     final String instName = inst[0];
                     for (int n = 0; n < 25; n++) {
                         final int note = n;
@@ -107,42 +109,55 @@ public final class PackBuilder {
                     }
                 }
             }
-            // rank tags + emojis: bitmap font glyphs, merged additively into the default font
+            // rank tags + emojis: bitmap font glyphs, merged additively into the default font.
+            // Glyph indices advance for EVERY configured entry so they stay aligned with
+            // Ranks.glyph()/Emojis.glyph(), which also count by position. A provider is only
+            // emitted when the texture is actually packed: referencing a file the client cannot
+            // find is a dangling reference, and the missing rank shows as one tofu box instead.
             StringBuilder providers = new StringBuilder();
             int gi = 0;
             for (Ranks.RankDef def : plugin.ranks().all()) {
-                if (!providers.isEmpty()) providers.append(',');
-                providers.append("{\"type\":\"bitmap\",\"file\":\"minecraft:font/rank_")
-                        .append(def.key()).append(".png\",\"ascent\":").append(def.ascent())
-                        .append(",\"height\":").append(def.ascent())
-                        .append(",\"chars\":[\"\\u").append(String.format("%04X", 0xE000 + gi)).append("\"]}");
                 File png = new File(textures, def.texture());
                 if (png.isFile()) {
+                    if (!providers.isEmpty()) providers.append(',');
+                    providers.append("{\"type\":\"bitmap\",\"file\":\"minecraft:font/rank_")
+                            .append(def.key()).append(".png\",\"ascent\":").append(def.ascent())
+                            .append(",\"height\":").append(def.ascent())
+                            .append(",\"chars\":[\"\\u").append(String.format("%04X", 0xE000 + gi)).append("\"]}");
                     putBytes(zip, "assets/minecraft/textures/font/rank_" + def.key() + ".png",
                             Files.readAllBytes(png.toPath()));
                 } else {
-                    plugin.getLogger().warning("Missing texture for rank '" + def.key() + "': " + png.getPath());
+                    plugin.getLogger().warning("Missing texture for rank '" + def.key() + "': " + png.getPath()
+                            + " - this rank will show as a blank box in chat");
                 }
                 gi++;
             }
             int ei = 0;
             for (Emojis.EmojiDef def : plugin.emojis().all()) {
-                if (!providers.isEmpty()) providers.append(',');
-                providers.append("{\"type\":\"bitmap\",\"file\":\"minecraft:font/emoji_")
-                        .append(def.key()).append(".png\",\"ascent\":").append(def.ascent())
-                        .append(",\"height\":").append(def.ascent())
-                        .append(",\"chars\":[\"\\u").append(String.format("%04X", 0xE100 + ei)).append("\"]}");
                 File png = new File(textures, def.texture());
                 if (png.isFile()) {
+                    if (!providers.isEmpty()) providers.append(',');
+                    providers.append("{\"type\":\"bitmap\",\"file\":\"minecraft:font/emoji_")
+                            .append(def.key()).append(".png\",\"ascent\":").append(def.ascent())
+                            .append(",\"height\":").append(def.ascent())
+                            .append(",\"chars\":[\"\\u").append(String.format("%04X", 0xE100 + ei)).append("\"]}");
                     putBytes(zip, "assets/minecraft/textures/font/emoji_" + def.key() + ".png",
                             Files.readAllBytes(png.toPath()));
                 } else {
-                    plugin.getLogger().warning("Missing texture for emoji '" + def.key() + "': " + png.getPath());
+                    plugin.getLogger().warning("Missing texture for emoji '" + def.key() + "': " + png.getPath()
+                            + " - :" + def.key() + ": will not render");
                 }
                 ei++;
             }
             if (!providers.isEmpty()) {
-                put(zip, "assets/minecraft/font/default.json", "{\"providers\":[" + providers + "]}");
+                // A pack REPLACES font/default.json outright — overlays do NOT merge JSON files.
+                // Without re-adding the vanilla references, every ordinary character would lose its
+                // glyph (the whole server would render as tofu boxes). Custom glyphs go first so they
+                // win for their private-use codepoints, then vanilla handles everything else.
+                String vanilla = "{\"type\":\"reference\",\"id\":\"minecraft:include/space\"},"
+                        + "{\"type\":\"reference\",\"id\":\"minecraft:include/default\",\"filter\":{\"uniform\":false}},"
+                        + "{\"type\":\"reference\",\"id\":\"minecraft:include/unifont\"}";
+                put(zip, "assets/minecraft/font/default.json", "{\"providers\":[" + providers + "," + vanilla + "]}");
             }
             // custom sounds: ogg files + sounds.json registering "custom.<key>"
             if (!plugin.sounds().all().isEmpty()) {
