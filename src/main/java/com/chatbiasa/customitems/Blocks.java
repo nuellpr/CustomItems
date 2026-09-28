@@ -10,10 +10,15 @@ import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataType;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public final class Blocks {
 
@@ -49,6 +54,11 @@ public final class Blocks {
     private final Map<String, BlockDef> byKey = new LinkedHashMap<>();
     /** "instrument:note" -> def. A noteblock has no block entity, so its blockstate IS the identity. */
     private final Map<String, BlockDef> byState = new LinkedHashMap<>();
+    /** "world,x,y,z" of blocks a player placed from a custom block item. A vanilla noteblock can be
+     *  right-clicked into any instrument+note the same way, so blockstate alone cannot prove a block
+     *  is ours -- without this set a player converts unlimited vanilla note blocks into custom ones. */
+    private final Set<String> placed = new HashSet<>();
+    private File placedFile;
 
     public Blocks(CustomItemsPlugin plugin) {
         this.plugin = plugin;
@@ -78,6 +88,7 @@ public final class Blocks {
             i++;
         }
         plugin.getLogger().info("Loaded " + byKey.size() + " custom blocks");
+        loadPlaced(); // idempotent: clears + re-reads, so /ci reload is safe
     }
 
     /** blockstate instrument name for a Bukkit Instrument, e.g. PIANO -> harp */
@@ -119,5 +130,42 @@ public final class Blocks {
     public String id(ItemStack st) {
         if (st == null) return null;
         return st.getPersistentDataContainer().get(pdcKey, PersistentDataType.STRING);
+    }
+
+    private static String coord(org.bukkit.Location l) {
+        return l.getWorld().getName() + "," + l.getBlockX() + "," + l.getBlockY() + "," + l.getBlockZ();
+    }
+
+    public boolean isPlaced(org.bukkit.Location l) {
+        return l != null && placed.contains(coord(l));
+    }
+
+    public void markPlaced(org.bukkit.Location l) {
+        if (l != null && placed.add(coord(l))) savePlaced();
+    }
+
+    public void forget(org.bukkit.Location l) {
+        if (l != null && placed.remove(coord(l))) savePlaced();
+    }
+
+    private void loadPlaced() {
+        placed.clear();
+        placedFile = new File(plugin.getDataFolder(), "placed-blocks.txt");
+        if (!placedFile.isFile()) return;
+        try {
+            for (String line : Files.readAllLines(placedFile.toPath(), StandardCharsets.UTF_8)) {
+                if (!line.isBlank()) placed.add(line.trim());
+            }
+        } catch (IOException e) {
+            plugin.getLogger().warning("Could not read placed-blocks.txt: " + e.getMessage());
+        }
+    }
+
+    private void savePlaced() {
+        try {
+            Files.write(placedFile.toPath(), placed, StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            plugin.getLogger().warning("Could not write placed-blocks.txt: " + e.getMessage());
+        }
     }
 }

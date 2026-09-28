@@ -12,6 +12,9 @@ public final class Emojis {
 
     public record EmojiDef(String key, String texture, int ascent) {}
 
+    /** U+E100..U+E1FF is 256 codepoints; same overflow guard as Ranks.MAX_GLYPHS. */
+    public static final int MAX_GLYPHS = 256;
+
     private final CustomItemsPlugin plugin;
     private final Map<String, EmojiDef> emojis = new LinkedHashMap<>();
 
@@ -26,6 +29,11 @@ public final class Emojis {
         YamlConfiguration yml = YamlConfiguration.loadConfiguration(f);
         if (yml.getConfigurationSection("emojis") == null) return;
         for (String key : yml.getConfigurationSection("emojis").getKeys(false)) {
+            if (emojis.size() >= MAX_GLYPHS) {
+                plugin.getLogger().warning("emojis.yml: only the first " + MAX_GLYPHS
+                        + " emojis are loaded; '" + key + "' and later ones have no free glyph.");
+                break;
+            }
             String tex = yml.getString("emojis." + key + ".texture", key + ".png");
             int ascent = yml.getInt("emojis." + key + ".ascent", 8);
             emojis.put(key.toLowerCase(), new EmojiDef(key.toLowerCase(), tex, ascent));

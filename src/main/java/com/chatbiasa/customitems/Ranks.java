@@ -12,6 +12,10 @@ public final class Ranks {
 
     public record RankDef(String key, String texture, int ascent) {}
 
+    /** U+E000..U+E0FF is 256 codepoints. Rank 257 would land on \u0F00 (a CJK glyph) and shift
+     *  every later rank off its bitmap, so the file is truncated here instead. */
+    public static final int MAX_GLYPHS = 256;
+
     private final CustomItemsPlugin plugin;
     private final Map<String, RankDef> ranks = new LinkedHashMap<>();
 
@@ -26,6 +30,11 @@ public final class Ranks {
         YamlConfiguration yml = YamlConfiguration.loadConfiguration(f);
         if (yml.getConfigurationSection("ranks") == null) return;
         for (String key : yml.getConfigurationSection("ranks").getKeys(false)) {
+            if (ranks.size() >= MAX_GLYPHS) {
+                plugin.getLogger().warning("ranks.yml: only the first " + MAX_GLYPHS
+                        + " ranks are loaded; '" + key + "' and later ones have no free glyph.");
+                break;
+            }
             String tex = yml.getString("ranks." + key + ".texture", key + ".png");
             int ascent = yml.getInt("ranks." + key + ".ascent", 8);
             ranks.put(key.toLowerCase(), new RankDef(key.toLowerCase(), tex, ascent));

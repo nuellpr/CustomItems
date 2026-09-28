@@ -43,7 +43,7 @@ mekanisme lain (mis. data-driven block via plugin), di luar cakupan plugin ini.
 
 ## Install
 
-1. Download `CustomItems-0.3.0.jar` dari [Releases](../../releases), taruh di folder `plugins/`
+1. Download `CustomItems-0.5.0.jar` dari [Releases](../../releases), taruh di folder `plugins/`
 2. Start server → folder `plugins/CustomItems/` tergenerate
 3. Untuk server online: **wajib** set `external-url` di `config.yml` ke IP/URL publik (mis. `http://play.myserver.com:8077`) dan buka port-nya. Kalau dibiarkan kosong, plugin memakai bind IP server dan hanya berfungsi untuk pemain di mesin yang sama — URL `http://0.0.0.0:8077` tidak bisa di-download client.
 4. `/ci reload`
@@ -52,12 +52,29 @@ mekanisme lain (mis. data-driven block via plugin), di luar cakupan plugin ini.
 
 | Bug | Gejala | Perbaikan |
 |---|---|---|
-| Noteblock vanilla jadi tak terlihat | Resource pack hanya menulis 10 dari 23 instrument noteblock, padahal file `blockstates/note_block.json` menimpa vanilla — semua instrument lain (termasuk `harp`, default noteblock) kehilangan model | Semua 23 instrument × 25 note × 2 powered = 1150 varian ditulis |
+| Noteblock vanilla jadi tak terlihat | Resource pack menimpa `blockstates/note_block.json` dengan 1150 varian `instrument=...,note=...`, padahal vanilla cuma punya satu variant `""` — semua key `instrument=` tidak pernah match, jadi model hilang | Override dihapus total. Blockstate vanilla dibiarkan utuh; identitas custom lewat `items/note_block.json` |
 | Seluruh teks server rusak jadi kotak | `font/default.json` ditulis ulang tanpa referensi font vanilla, padahal resource pack **mengganti** file itu, bukan menggabungkannya | Referensi `include/space`, `include/default`, `include/unifont` ditambahkan kembali |
 | Custom block tidak bisa di-break | Block identity disimpan ke `TileState`, tapi noteblock **tidak punya block entity** — PDC tidak pernah tersimpan, jadi block tidak dikenali dan drop item gagal | Identity dibaca dari blockstate `instrument+note` |
 | Pack URL `http://0.0.0.0:8077` | Client tidak bisa mengunduh pack | `0.0.0.0`/`::` diganti loopback + warning, trailing slash dan `/pack.zip` ganda dinormalkan |
 | `/ci menu` crash | `createInventory` melempar error di atas 54 slot saat item+block > 54 | Ukuran dibatasi 54 + warning |
 | Build gagal tanpa Gradle | `gradle` tidak ada di PATH dan repo tidak punya wrapper | Lihat "Build dari source" — bisa pakai `javac` langsung |
+
+## Perubahan 0.5.0 (fix dupe & overflow glyph)
+
+| Bug | Gejala | Perbaikan |
+|---|---|---|
+| Custom block gratis tanpa batas | Identitas block dibaca dari blockstate noteblock. Tapi noteblock vanilla bisa di-*right-click* sampai jadi `instrument+note` yang sama persis, lalu di-break → dapat item custom. Cukup 1 noteblock vanilla per state | Lokasi block yang dipasang dari item custom dicatat di `plugins/CustomItems/placed-blocks.txt`. Item custom cuma drop kalau lokasinya tercatat di sana; noteblock vanilla di lokasi yang tidak tercatat jatuh ke drop vanilla |
+| Glyph rank/emoji meluber ke huruf CJK | `\uE000`+ (rank) dan `\uE100`+ (emoji) hanya menyisakan 256 codepoint. Rank ke-257 mendarat di `\u0F00` (CJK) dan **semua** glyph setelahnya bergeser | Dibatasi 256 entri; sisanya diabaikan + warning di console |
+| Build error di Paper 26.x | `RecipeChoice.ExactChoice(ItemStack)` deprecated-for-removal | Pakai static factory `RecipeChoice.exactChoice(...)` |
+
+### Aturan custom block
+
+Karena identitas custom block tersimpan di blockstate noteblock, ada dua aturan operasional:
+
+1. **Jangan ganti `instrument`/`note` di `blocks.yml` setelah pemain membangun block itu.** Blok lama ikut berubah tampilan karena identitasnya = posisi file, bukan ID.
+2. **Hapus `placed-blocks.txt` hanya saat server kosong.** File itu yang membedakan block kita dari noteblock vanilla; menghapusnya = semua block custom jadi tidak bisa di-drop.
+
+Kalau file ini hilang, `onPlace` akan menandai ulang begitu pemain menaruh block lagi — jadi file di-backup bareng `plugins/CustomItems/`.
 
 ## Konfigurasi
 
@@ -186,7 +203,7 @@ Kode keluar `0` = aman dibagikan ke pemain, `1` = ada masalah. Jalankan ini sete
 gradle build
 ```
 
-Butuh Gradle 9.x + Java 25. Hasil di `build/libs/CustomItems-0.4.0.jar`.
+Butuh Gradle 9.x + Java 25. Hasil di `build/libs/CustomItems-0.5.0.jar`.
 
 Kalau Gradle tidak terpasang (repo ini belum punya wrapper), bisa kompilasi langsung dengan JDK 25:
 
@@ -205,11 +222,12 @@ gagal dengan "cannot find symbol" meskipun paper-api-nya benar.
 
 - Items: `custom_model_data` string + item model definition format 1.21.4+ (`select`)
 - Blocks: noteblock method (instrument + note unik per block). Identitas block dibaca dari blockstate noteblock (`instrument` + `note`), **bukan** PDC — noteblock tidak punya block entity. Konsekuensinya: jangan ubah `instrument`/`note` sebuah block di `blocks.yml` setelah pemain membangun dengannya — block lama akan berubah tampilan
+- Blocks: lokasi yang sudah di-*mark* disimpan di `plugins/CustomItems/placed-blocks.txt`. `onBreak` menolak drop item custom kalau lokasi tidak ada di sana, jadi noteblock vanilla yang di-*right-click* jadi `instrument+note` yang sama tidak bisa di-*exploit*
 - `blockstates/note_block.json` **tidak pernah** di-override. Vanilla punya satu variant `""` tanpa key `instrument=`, jadi override berbentuk `instrument=...,note=...` hanya bisa menghapus model (blok tak terlihat) — bukan memberi tekstur baru. 26.2 masih bentuk yang sama, jadi ini bukan regresi versi
 - Recipes: ingredient custom dicocokkan via `RecipeChoice.exactChoice(ItemStack)` (constructor `ExactChoice(ItemStack)` deprecated-for-removal di Paper 26.x)
 - Mobs: vanilla model + atribut custom (bukan model 3D custom seperti ModelEngine)
-- Rank tags: bitmap font glyph (`\uE000`+) di `font/default.json`, dengan referensi font vanilla dipertahankan agar teks biasa tetap tampil
-- Emojis: glyph range terpisah (`\uE100`+), trigger `:key:` di chat
+- Rank tags: bitmap font glyph (`\uE000`+) di `font/default.json`, dengan referensi font vanilla dipertahankan agar teks biasa tetap tampil. Maksimal **256 rank** (U+E000–U+E0FF); lebih dari itu diabaikan + warning
+- Emojis: glyph range terpisah (`\uE100`+), trigger `:key:` di chat. Maksimal **256 emoji** (U+E100–U+E1FF)
 - Font bitmap: PNG harus setinggi nilai `ascent` (default 8 piksel) dan disusun horizontal, satu glyph per slot sesuai urutan `chars` — file terlalu tinggi/lebar membuat semua glyph bergeser. Texture yang tidak ada **tidak** lagi ditulis sebagai provider (dulu jadi referensi menggantung), tapi nomor glyph tetap selaras
 - Sounds: `sounds.json` custom, key namespace `custom.<nama>`
 - Webserver: `com.sun.net.httpserver`, serve `/pack.zip`
