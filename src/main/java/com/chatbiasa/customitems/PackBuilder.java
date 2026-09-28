@@ -35,10 +35,10 @@ public final class PackBuilder {
 
         File out = new File(plugin.getDataFolder(), "pack.zip");
         try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(out.toPath()))) {
-            // pack_format for <=1.21.8, min/max_format arrays for 1.21.9+ (both read by 1.21.9+)
-            int fmt = plugin.getConfig().getInt("pack-format", 46);
+            // 1.21.9+ reads min_format/max_format; pack_format stays for older clients.
+            int fmt = plugin.getConfig().getInt("pack-format", 88);
             put(zip, "pack.mcmeta", """
-                    {"pack":{"pack_format":%d,"min_format":[%d,0],"max_format":[%d,0],"description":"CustomItems pack"}}""".formatted(
+                    {"pack":{"pack_format":%d,"min_format":%d,"max_format":%d,"description":"CustomItems pack"}}""".formatted(
                     fmt, fmt, fmt));
             for (List<ItemDef> defs : byBase.values()) {
                 String base = defs.get(0).base().getKey().getKey();
@@ -64,28 +64,12 @@ public final class PackBuilder {
                     }
                 }
             }
-            // custom blocks hijack noteblock states: one blockstate file covering ALL combos.
-            // This file REPLACES the vanilla note_block.json, so every instrument/note/powered
-            // combination must be present or the untouched ones lose their model (invisible blocks).
+            // Custom blocks are noteblocks rendered as a custom ITEM model. blockstates/note_block.json
+            // is deliberately NOT overridden: vanilla has a single "" variant with no `instrument=`
+            // keys, so an instrument-keyed override can only ever strip the model (invisible blocks).
+            // The blockstate the player sees in-world is vanilla; the held item is the custom model.
             if (!plugin.blocks().all().isEmpty()) {
                 List<Blocks.BlockDef> blocks = plugin.blocks().all();
-                StringBuilder variants = new StringBuilder();
-                for (String[] inst : Blocks.ALL_INSTRUMENTS) {
-                    final String instName = inst[0];
-                    for (int n = 0; n < 25; n++) {
-                        final int note = n;
-                        for (String powered : new String[]{"false", "true"}) {
-                            if (!variants.isEmpty()) variants.append(',');
-                            Blocks.BlockDef hit = blocks.stream()
-                                    .filter(d -> d.instrument().equals(instName) && d.note() == note).findFirst().orElse(null);
-                            String model = hit != null ? "minecraft:block/cblock_" + hit.key() : "minecraft:block/note_block";
-                            variants.append("\"instrument=").append(instName).append(",note=").append(note)
-                                    .append(",powered=").append(powered).append("\":{\"model\":\"").append(model).append("\"}");
-                        }
-                    }
-                }
-                put(zip, "assets/minecraft/blockstates/note_block.json",
-                        "{\"variants\":{" + variants + "}}");
                 StringBuilder blockCases = new StringBuilder();
                 for (Blocks.BlockDef def : blocks) {
                     if (!blockCases.isEmpty()) blockCases.append(',');

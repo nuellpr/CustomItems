@@ -25,6 +25,10 @@ $Palette = @{
     # smile emoji
     'O' = @(107, 74, 0)         # face outline
     'A' = @(255, 204, 51)       # amber face
+    # admin rank tag
+    'C' = @(86, 15, 22)         # crimson outline
+    'V' = @(190, 32, 45)        # crimson body
+    'W' = @(240, 96, 104)       # crimson highlight
 }
 
 $Art = @{}
@@ -77,6 +81,18 @@ $Art['smile.png'] = @(
     'OAAAAAAO'
     '.OAOOAO.'
     '..OOOO..'
+)
+
+# Rank tags must be exactly `ascent` tall too (ranks.yml default ascent: 8).
+$Art['admin.png'] = @(
+    '..CCCC..'
+    '.CWWVVVC'
+    'CWWVVVVC'
+    'CVVVVVVC'
+    'CVVCVVVC'
+    'CVVCVVVC'
+    'CVVVVVVC'
+    '.CCCCCC.'
 )
 
 if (-not (Test-Path $OutDir)) { New-Item -ItemType Directory -Path $OutDir -Force | Out-Null }

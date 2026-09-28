@@ -9,7 +9,7 @@
 param(
     [string]$Root = (Join-Path $PSScriptRoot '..\..\.mc-test'),
     [string]$PaperJar,
-    [string]$Jar = (Join-Path $PSScriptRoot '..\releases\CustomItems-0.3.0.jar'),
+    [string]$Jar = (Join-Path $PSScriptRoot '..\releases\CustomItems-0.4.0.jar'),
     [string]$SeedFrom,          # optional: copy textures/*.yml from a real server's plugin folder
     [int]$Port = 25698,
     [int]$RconPort = 25699,
@@ -19,13 +19,16 @@ param(
 $ErrorActionPreference = 'Stop'
 
 if (-not $PaperJar) {
+    # Paper 26.2 needs Java 25; older 1.21.x jars still load but cannot test the 26.2 target.
     $candidates = @(
-        'C:\Users\Nuel\Desktop\ARCANIA SERVER\paper-1.21.11-132.jar'
+        (Join-Path $PSScriptRoot '..\.tmp-api\paper-server.jar')
+        'C:\Users\Nuel\Desktop\ARCANIA SERVER\paper-26.2-129.jar'
         (Get-ChildItem 'C:\Users\Nuel\Desktop' -Directory -ErrorAction SilentlyContinue |
-            ForEach-Object { Join-Path $_.FullName 'paper*.jar' } | Select-Object -First 1)
+            ForEach-Object { Join-Path $_.FullName 'paper-26*.jar' } | Select-Object -First 1)
     ) | Where-Object { $_ -and (Test-Path $_) }
     if (-not $candidates) { throw "no Paper jar found; pass -PaperJar <path>" }
-    $PaperJar = $candidates[0]
+    # @() matters: a single surviving candidate unrolls to a string and [0] would index a character
+    $PaperJar = @($candidates)[0]
 }
 if (-not (Test-Path $PaperJar)) { throw "Paper jar not found: $PaperJar" }
 if (-not (Test-Path $Jar)) { throw "plugin jar not found: $Jar (build it first)" }

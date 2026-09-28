@@ -18,9 +18,11 @@ import java.util.Map;
 public final class Blocks {
 
     /**
-     * Every noteblock blockstate instrument name mapped to its Bukkit enum name. The blockstate
-     * file we ship REPLACES the vanilla note_block.json, so all of these must be emitted or the
-     * missing ones (harp/piano above all) render as a missing model — i.e. invisible note blocks.
+     * Noteblock instrument name -> Bukkit Instrument enum name. Only used to turn a placed
+     * noteblock back into a lookup key; the pack does not emit a note_block blockstate, because
+     * vanilla has a single "" variant with no instrument keys and any override could only delete
+     * the model. Newer instruments (trumpet, zombie, ...) are not listed — we only ever stamp the
+     * ten below, and anything else falls back to "harp".
      */
     static final String[][] ALL_INSTRUMENTS = {
             {"harp", "PIANO"}, {"basedrum", "BASS_DRUM"}, {"snare", "SNARE_DRUM"}, {"hat", "STICKS"},
@@ -115,7 +117,7 @@ public final class Blocks {
 
     /** custom block key stored on an item, or null */
     public String id(ItemStack st) {
-        if (st == null || !st.hasItemMeta()) return null;
-        return st.getItemMeta().getPersistentDataContainer().get(pdcKey, PersistentDataType.STRING);
+        if (st == null) return null;
+        return st.getPersistentDataContainer().get(pdcKey, PersistentDataType.STRING);
     }
 }

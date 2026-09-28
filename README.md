@@ -16,17 +16,30 @@ Plugin Minecraft Paper seperti ItemsAdder: custom items, blocks, mobs, dan GUI m
 
 ## Kompatibilitas
 
-Paper 1.21.4 – 26.2 (Java 21+). Set `pack-format` di `config.yml` sesuai versi server:
+Target default: **Paper 26.2 (Minecraft 26.2 "Chaos Cubed"), Java 25**. Set `pack-format` di `config.yml` sesuai versi server:
 
-| Versi | pack-format |
-|---|---|
-| 1.21.4 – 1.21.8 | 46 |
-| 1.21.9 – 1.21.10 | 69 |
-| 1.21.11 | 75 |
-| 26.1 | 84 |
-| 26.2 | 88 |
+| Versi | pack-format | Java |
+|---|---|---|
+| 1.21.4 | 46 | 21 |
+| 1.21.5 | 55 | 21 |
+| 1.21.6 | 63 | 21 |
+| 1.21.7 – 1.21.8 | 64 | 21 |
+| 1.21.9 – 1.21.10 | 69 | 21 |
+| 1.21.11 | 75 | 21 |
+| 26.1 | 84 | 25 |
+| 26.2 | 88 | 25 |
 
 Salah angka tetap jalan, hanya muncul confirm prompt "incompatible" saat pemain menerima pack.
+
+> 26.3 masih alpha di Paper, belum ada release stabil — jangan set `pack-format: 97` di server 26.2.
+
+### Catatan custom block
+
+Custom block adalah noteblock yang **item di tangan**-nya pakai model kustom
+(`assets/minecraft/items/note_block.json` → `select` pada `minecraft:custom_model_data`).
+Blockstate vanilla `note_block.json` **tidak** di-override, jadi blok yang sudah dipasang
+selalu tampil seperti noteblock biasa. Merender block yang benar-benar berbeda butuh
+mekanisme lain (mis. data-driven block via plugin), di luar cakupan plugin ini.
 
 ## Install
 
@@ -173,24 +186,30 @@ Kode keluar `0` = aman dibagikan ke pemain, `1` = ada masalah. Jalankan ini sete
 gradle build
 ```
 
-Butuh Gradle 9.x + Java 21+. Hasil di `build/libs/CustomItems-0.3.0.jar`.
+Butuh Gradle 9.x + Java 25. Hasil di `build/libs/CustomItems-0.4.0.jar`.
 
-Kalau Gradle tidak terpasang (repo ini belum punya wrapper), bisa kompilasi langsung dengan JDK 21+:
+Kalau Gradle tidak terpasang (repo ini belum punya wrapper), bisa kompilasi langsung dengan JDK 25:
 
 ```bash
-javac -encoding UTF-8 --release 21 -cp paper-api.jar -d build/classes $(find src/main/java -name '*.java')
+javac -encoding UTF-8 --release 25 -cp paper-api.jar -d build/classes $(find src/main/java -name '*.java')
 ```
 
-`paper-api` bisa diambil dari `libraries/io/papermc/paper/paper-api/...` milik server Paper, atau dari cache Gradle.
+`paper-api` 26.2 bisa diambil dari `libraries/io/papermc/paper/paper-api/...` milik server Paper, dari cache Gradle, atau dari `https://repo.papermc.io/repository/maven-public/` (versi `26.2.build.129-stable`).
+
+Kompilasi butuh `paper-api.jar` **plus** dependency-nya di classpath: `org.jetbrains:annotations`,
+`com.google.guava:guava` (dipakai `Material.getItemAttributes`), dan library adventure dari
+`META-INF/libraries/` di dalam `paper-server.jar`. Tanpa `guava`/`annotations` javac akan
+gagal dengan "cannot find symbol" meskipun paper-api-nya benar.
 
 ## Catatan teknis
 
 - Items: `custom_model_data` string + item model definition format 1.21.4+ (`select`)
-- Blocks: noteblock method (instrument + note unik per block). Noteblock **tidak punya block entity**, jadi identitas block disimpan di blockstate-nya, bukan PDC. Konsekuensinya: jangan ubah `instrument`/`note` sebuah block di `blocks.yml` setelah pemain membangun dengannya — block lama akan berubah tampilan
+- Blocks: noteblock method (instrument + note unik per block). Identitas block dibaca dari blockstate noteblock (`instrument` + `note`), **bukan** PDC — noteblock tidak punya block entity. Konsekuensinya: jangan ubah `instrument`/`note` sebuah block di `blocks.yml` setelah pemain membangun dengannya — block lama akan berubah tampilan
+- `blockstates/note_block.json` **tidak pernah** di-override. Vanilla punya satu variant `""` tanpa key `instrument=`, jadi override berbentuk `instrument=...,note=...` hanya bisa menghapus model (blok tak terlihat) — bukan memberi tekstur baru. 26.2 masih bentuk yang sama, jadi ini bukan regresi versi
+- Recipes: ingredient custom dicocokkan via `RecipeChoice.exactChoice(ItemStack)` (constructor `ExactChoice(ItemStack)` deprecated-for-removal di Paper 26.x)
 - Mobs: vanilla model + atribut custom (bukan model 3D custom seperti ModelEngine)
 - Rank tags: bitmap font glyph (`\uE000`+) di `font/default.json`, dengan referensi font vanilla dipertahankan agar teks biasa tetap tampil
 - Emojis: glyph range terpisah (`\uE100`+), trigger `:key:` di chat
 - Font bitmap: PNG harus setinggi nilai `ascent` (default 8 piksel) dan disusun horizontal, satu glyph per slot sesuai urutan `chars` — file terlalu tinggi/lebar membuat semua glyph bergeser. Texture yang tidak ada **tidak** lagi ditulis sebagai provider (dulu jadi referensi menggantung), tapi nomor glyph tetap selaras
-- Recipes: Bukkit native, ingredient custom dicocokkan via PDC (ExactChoice)
 - Sounds: `sounds.json` custom, key namespace `custom.<nama>`
 - Webserver: `com.sun.net.httpserver`, serve `/pack.zip`

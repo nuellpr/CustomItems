@@ -3,7 +3,7 @@ plugins {
 }
 
 group = "com.chatbiasa"
-version = "0.3.0"
+version = "0.4.0"
 
 repositories {
     mavenCentral()
@@ -11,11 +11,13 @@ repositories {
 }
 
 dependencies {
-    compileOnly("io.papermc.paper:paper-api:1.21.4-R0.1-SNAPSHOT")
+    // Minecraft 26.2 "Chaos Cubed" / Paper build 129. 26.3 is alpha on Paper, do not target it.
+    compileOnly("io.papermc.paper:paper-api:26.2.build.129-stable")
 }
 
 tasks.withType<JavaCompile> {
-    options.release = 21
+    // 26.2 requires Java 25
+    options.release = 25
 }
 
 tasks.processResources {

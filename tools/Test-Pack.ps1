@@ -43,57 +43,41 @@ else {
         if ($j.pack.pack_format) { Ok "pack_format = $($j.pack.pack_format)" } else { Bad 'pack_format missing' }
         # 1.21.9+ reads min/max_format; older clients ignore them. Keep them consistent.
         if ($null -ne $j.pack.min_format) {
-            if ($j.pack.min_format[0] -eq $j.pack.pack_format) { Ok 'min_format matches pack_format' }
-            else { Warn "min_format $($j.pack.min_format[0]) != pack_format $($j.pack.pack_format)" }
+            # int on 1.21.9+ clients, [major, minor] accepted too
+            $min = if ($j.pack.min_format -is [array]) { $j.pack.min_format[0] } else { $j.pack.min_format }
+            if ($min -eq $j.pack.pack_format) { Ok 'min_format matches pack_format' }
+            else { Warn "min_format $min != pack_format $($j.pack.pack_format)" }
         }
     } catch { Bad "pack.mcmeta is not valid JSON: $($_.Exception.Message)" }
 }
 
-# --- 2. note_block blockstate must cover EVERY instrument (else vanilla blocks go invisible) ---
-Head 'note_block blockstate coverage'
+# --- 2. blockstates/note_block.json must NOT be overridden ---
+# Vanilla ships one "" variant with no instrument keys, so any instrument-keyed override can only
+# delete the model. Custom blocks ship as an ITEM model instead (items/note_block.json select).
+Head 'note_block blockstate must stay vanilla'
 $bs = Read-Entry 'assets/minecraft/blockstates/note_block.json'
-if (-not $bs) { Ok 'no note_block override (no custom blocks defined)' }
-else {
+if (-not $bs) { Ok 'no note_block blockstate override - vanilla model preserved' }
+else { Bad 'note_block.json is overridden; vanilla noteblocks will lose their model' }
+
+$nbItem = Read-Entry 'assets/minecraft/items/note_block.json'
+if ($nbItem) {
     try {
-        $j = $bs | ConvertFrom-Json
-        $variants = @($j.variants.PSObject.Properties.Name)
-        Ok "$($variants.Count) variants"
-
-        $instruments = @{
-            harp = 'PIANO'; basedrum = 'BASS_DRUM'; snare = 'SNARE_DRUM'; hat = 'STICKS'
-            bass = 'BASS_GUITAR'; flute = 'FLUTE'; bell = 'BELL'; guitar = 'GUITAR'
-            chime = 'CHIME'; xylophone = 'XYLOPHONE'; iron_xylophone = 'IRON_XYLOPHONE'
-            cow_bell = 'COW_BELL'; didgeridoo = 'DIDGERIDOO'; bit = 'BIT'; banjo = 'BANJO'
-            pling = 'PLING'; zombie = 'ZOMBIE'; skeleton = 'SKELETON'; creeper = 'CREEPER'
-            dragon = 'DRAGON'; wither_skeleton = 'WITHER_SKELETON'; piglin = 'PIGLIN'
-            custom_head = 'CUSTOM_HEAD'
-        }
-        $expected = $instruments.Count * 25 * 2
-        if ($variants.Count -eq $expected) { Ok "variant count == $expected (23 instruments x 25 notes x 2 powered)" }
-        else { Bad "variant count $($variants.Count) != $expected - missing states render as MISSING MODEL (invisible blocks)" }
-
-        $missing = @()
-        foreach ($inst in $instruments.Keys) {
-            if (-not ($variants -contains "instrument=$inst,note=0,powered=false")) { $missing += $inst }
-        }
-        if ($missing.Count -eq 0) { Ok 'all 23 instrument names present' }
-        else { Bad "instrument names missing: $($missing -join ', ')" }
-
-        # the vanilla default noteblock must never fall through to a missing model
-        if ($variants -contains 'instrument=harp,note=0,powered=false') { Ok 'vanilla default (harp, note 0, unpowered) covered' }
-        else { Bad 'vanilla default noteblock state NOT covered -> plain note blocks turn invisible' }
-
-        # Vanilla models (minecraft:block/note_block) live in the client and are deliberately NOT
-        # shipped. Only the custom cblock_* models must exist inside the pack.
-        $dangling = @()
-        foreach ($v in $j.variants.PSObject.Properties) {
-            $m = ([string]$v.Value.model) -replace '^minecraft:', ''
-            if ($m -like 'block/cblock_*' -and -not ($names -contains "assets/minecraft/models/$m.json")) { $dangling += $m }
-        }
-        if ($dangling.Count -eq 0) { Ok 'every custom cblock_* variant model exists in pack' }
-        else { Bad "variant points at missing model: $(($dangling | Select-Object -Unique) -join ', ')" }
-    } catch { Bad "note_block.json is not valid JSON: $($_.Exception.Message)" }
+        $j = $nbItem | ConvertFrom-Json
+        if ($j.model.type -eq 'minecraft:select') { Ok "items/note_block.json selects on $($j.model.property)" }
+        else { Warn "items/note_block.json model.type is $($j.model.type), expected minecraft:select" }
+    } catch { Bad "items/note_block.json is not valid JSON: $($_.Exception.Message)" }
 }
+
+# every cblock_* model/texture referenced anywhere in the pack must exist inside the pack
+$dangling = @()
+foreach ($n in $names) {
+    if ($n -notmatch 'assets/minecraft/models/block/(cblock_.+)\.json$') { continue }
+    $id = $Matches[1]
+    if (-not ($names -contains "assets/minecraft/textures/block/$id.png")) { $dangling += $id }
+    if (-not ($names -contains "assets/minecraft/models/item/$($id -replace '^cblock_', '').json")) { $dangling += "$id (item model)" }
+}
+if ($dangling.Count -eq 0) { Ok 'every cblock_* block model has its texture and item model' }
+else { Bad "cblock_* references missing entries: $(($dangling | Select-Object -Unique) -join ', ')" }
 
 # --- 3. font/default.json REPLACES vanilla; vanilla references must survive ---
 Head 'font/default.json (vanilla glyph preservation)'

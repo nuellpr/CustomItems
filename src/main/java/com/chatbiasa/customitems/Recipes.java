@@ -102,9 +102,9 @@ public final class Recipes {
         Material mat = Material.matchMaterial(s);
         if (mat != null) return new RecipeChoice.MaterialChoice(mat);
         ItemDef idef = plugin.items().get(s.toLowerCase());
-        if (idef != null) return new RecipeChoice.ExactChoice(plugin.items().stack(idef));
+        if (idef != null) return RecipeChoice.exactChoice(plugin.items().stack(idef));
         Blocks.BlockDef bdef = plugin.blocks().get(s.toLowerCase());
-        if (bdef != null) return new RecipeChoice.ExactChoice(plugin.blocks().stack(bdef));
+        if (bdef != null) return RecipeChoice.exactChoice(plugin.blocks().stack(bdef));
         return null;
     }
 }

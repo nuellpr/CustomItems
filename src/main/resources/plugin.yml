@@ -1,7 +1,7 @@
 name: CustomItems
 version: "${version}"
 main: com.chatbiasa.customitems.CustomItemsPlugin
-api-version: "1.21"
+api-version: "26.2"
 description: ItemsAdder-style custom items with auto resource pack hosting.
 commands:
   ci:
