@@ -35,15 +35,27 @@ Salah angka tetap jalan, hanya muncul confirm prompt "incompatible" saat pemain 
 
 ### Catatan custom block
 
-Custom block adalah noteblock yang **item di tangan**-nya pakai model kustom
-(`assets/minecraft/items/note_block.json` → `select` pada `minecraft:custom_model_data`).
-Blockstate vanilla `note_block.json` **tidak** di-override, jadi blok yang sudah dipasang
-selalu tampil seperti noteblock biasa. Merender block yang benar-benar berbeda butuh
-mekanisme lain (mis. data-driven block via plugin), di luar cakupan plugin ini.
+Custom block adalah **noteblock sungguhan** yang me-*stamp* `instrument` + `note` miliknya sendiri,
+lalu resource pack memetakan state itu ke model kustom lewat
+`assets/minecraft/blockstates/note_block.json` → `"instrument=...,note=...,powered=..."`.
+Mekanisme ini sama dengan Oraxen dan ItemsAdder, dan hasilnya: blok yang dipasang benar-benar
+**ter-render sebagai model kustom**, bukan cuma item di tangan.
+
+Tiga hal yang perlu diketahui:
+
+1. **Slot terbatas 250.** Identitas blok = `instrument` + `note`, jadi hanya 10 instrument × 25 note
+   yang bisa dipakai. Lebih dari itu akan menimpa identitas blok sebelumnya, jadi plugin berhenti
+   memuat dan memberi warning.
+2. **Noteblock vanilla bisa "meniru" tampilannya.** Pemain bisa me-*right-click* noteblock biasa
+   sampai `instrument` + `note`-nya kebetulan sama, dan blok itu akan **terlihat** seperti block
+   custom kita. Ini cuma menipu mata — `placed-blocks.txt` tetap mengatur drop, jadi tidak ada item
+   custom yang gratis. Trade-off yang sama dimiliki Oraxen/ItemsAdder.
+3. **Block yang dipasang tidak bisa di-cycle.** *Right-click* pada block custom di-cancel, jadi
+   `instrument`/`note`-nya tidak berubah.
 
 ## Install
 
-1. Download `CustomItems-0.7.0.jar` dari [Releases](../../releases), taruh di folder `plugins/`
+1. Download `CustomItems-0.8.0.jar` dari [Releases](../../releases), taruh di folder `plugins/`
 2. Start server → folder `plugins/CustomItems/` tergenerate
 3. Untuk server online: **wajib** set `external-url` di `config.yml` ke IP/URL publik (mis. `http://play.myserver.com:8077`) dan buka port-nya. Kalau dibiarkan kosong, plugin memakai bind IP server dan hanya berfungsi untuk pemain di mesin yang sama — URL `http://0.0.0.0:8077` tidak bisa di-download client.
 4. `/ci reload`
@@ -52,12 +64,23 @@ mekanisme lain (mis. data-driven block via plugin), di luar cakupan plugin ini.
 
 | Bug | Gejala | Perbaikan |
 |---|---|---|
-| Noteblock vanilla jadi tak terlihat | Resource pack menimpa `blockstates/note_block.json` dengan 1150 varian `instrument=...,note=...`, padahal vanilla cuma punya satu variant `""` — semua key `instrument=` tidak pernah match, jadi model hilang | Override dihapus total. Blockstate vanilla dibiarkan utuh; identitas custom lewat `items/note_block.json` |
+| Noteblock vanilla jadi tak terlihat | Resource pack menimpa `blockstates/note_block.json` dengan 1150 varian `instrument=...,note=...` **tanpa** variant `""`. `""` itu fallback yang dipakai client saat tidak ada key yang cocok; tanpanya, tidak ada noteblock yang match dan semua kehilangan model | **`0.4.0`** menghapus override-nya. **`0.8.0`** memperbaikinya: custom block benar-benar me-override blockstate — dengan tetap menyertakan `""` sebagai fallback |
 | Seluruh teks server rusak jadi kotak | `font/default.json` ditulis ulang tanpa referensi font vanilla, padahal resource pack **mengganti** file itu, bukan menggabungkannya | Referensi `include/space`, `include/default`, `include/unifont` ditambahkan kembali |
 | Custom block tidak bisa di-break | Block identity disimpan ke `TileState`, tapi noteblock **tidak punya block entity** — PDC tidak pernah tersimpan, jadi block tidak dikenali dan drop item gagal | Identity dibaca dari blockstate `instrument+note` |
 | Pack URL `http://0.0.0.0:8077` | Client tidak bisa mengunduh pack | `0.0.0.0`/`::` diganti loopback + warning, trailing slash dan `/pack.zip` ganda dinormalkan |
 | `/ci menu` crash | `createInventory` melempar error di atas 54 slot saat item+block > 54 | Ukuran dibatasi 54 + warning |
 | Build gagal tanpa Gradle | `gradle` tidak ada di PATH dan repo tidak punya wrapper | Lihat "Build dari source" — bisa pakai `javac` langsung |
+
+## Perubahan 0.8.0 (custom block sungguhan)
+
+| Perubahan | Detail |
+|---|---|
+| **Blok yang dipasang benar-benar custom** | Dulu `blockstates/note_block.json` sengaja tidak di-override, jadi blok custom hanya berbeda sebagai **item di tangan**; blok di dunia selalu tampil seperti noteblock biasa. Sekarang tiap custom block me-*stamp* `instrument` + `note` sendiri dan blockstate memetakannya ke `models/block/cblock_<key>.json`, jadi blok yang terpasang ter-render sebagai model kustom. Mekanisme yang sama dipakai Oraxen dan ItemsAdder |
+| Fallback `""` di blockstate | `assets/minecraft/blockstates/note_block.json` ditulis ulang dengan satu variant `""` → `minecraft:block/note_block` **plus** satu variant per custom block. `""` itu wajib: client memakainya saat tidak ada key yang cocok, dan itu yang menjaga semua noteblock vanilla di dunia tetap tampil. Inilah yang hilang di 0.3.0 |
+| `powered=true` ikut dipetakan | Tiap custom block dipetakan untuk **kedua** nilai `powered`. Kalau hanya `powered=false`, block yang di-*power* redstone diam-diam jatuh ke model noteblock vanilla |
+| 4 nilai `trumpet` ditambahkan | `Blocks.ALL_INSTRUMENTS` punya 27 nilai yang cocok dengan blockstate noteblock di 26.2. `trumpet`, `trumpet_exposed`, `trumpet_oxidized`, `trumpet_weathered` sebelumnya hilang, sehingga `stateName()` jatuh ke `"harp"` dan salah melaporkan blok |
+| Batas 250 block | Melewati 250 block (10 instrument × 25 note) membuat `instrument`/`note` berputar dan menimpa identitas blok sebelumnya secara diam-diam. Sekarang plugin berhenti memuat + memberi warning, seperti yang sudah dilakukan `Ranks`/`Emojis` untuk glyph |
+| Asersi `Test-Pack.ps1` dibalik | Sebelumnya assert "blockstate harus tetap vanilla". Sekarang assert sebaliknya: variant `""` **wajib ada**, harus ada key `instrument=`, tiap key harus berbentuk `instrument=,note=,powered=`, tiap state harus punya `powered=false` **dan** `powered=true`, dan model yang dirujuk harus benar-benar ada di dalam pack |
 
 ## Perubahan 0.7.0 (kemampuan CLI & GUI)
 
@@ -233,7 +256,7 @@ Kode keluar `0` = aman dibagikan ke pemain, `1` = ada masalah. Jalankan ini sete
 gradle build
 ```
 
-Butuh Gradle 9.x + Java 25. Hasil di `build/libs/CustomItems-0.7.0.jar`.
+Butuh Gradle 9.x + Java 25. Hasil di `build/libs/CustomItems-0.8.0.jar`.
 
 Kalau Gradle tidak terpasang (repo ini belum punya wrapper), bisa kompilasi langsung dengan JDK 25:
 
@@ -253,7 +276,7 @@ gagal dengan "cannot find symbol" meskipun paper-api-nya benar.
 - Items: `custom_model_data` string + item model definition format 1.21.4+ (`select`)
 - Blocks: noteblock method (instrument + note unik per block). Identitas block dibaca dari blockstate noteblock (`instrument` + `note`), **bukan** PDC — noteblock tidak punya block entity. Konsekuensinya: jangan ubah `instrument`/`note` sebuah block di `blocks.yml` setelah pemain membangun dengannya — block lama akan berubah tampilan
 - Blocks: lokasi yang sudah di-*mark* disimpan di `plugins/CustomItems/placed-blocks.txt`. `onBreak` menolak drop item custom kalau lokasi tidak ada di sana, jadi noteblock vanilla yang di-*right-click* jadi `instrument+note` yang sama tidak bisa di-*exploit*
-- `blockstates/note_block.json` **tidak pernah** di-override. Vanilla punya satu variant `""` tanpa key `instrument=`, jadi override berbentuk `instrument=...,note=...` hanya bisa menghapus model (blok tak terlihat) — bukan memberi tekstur baru. 26.2 masih bentuk yang sama, jadi ini bukan regresi versi
+- `blockstates/note_block.json` **di-override**: satu variant per custom block (`instrument=..,note=..,powered=..`) untuk `powered` false **dan** true, **plus** variant `""` yang menunjuk model noteblock vanilla. `""` itu wajib, bukan hiasan — itu fallback yang dipakai client saat tidak ada key yang cocok, dan vanilla sendiri hanya mendefinisikan satu variant itu untuk ratusan kombinasi state. Tanpa `""`, override apa pun hanya bisa menghapus model dari **seluruh** noteblock di dunia. Persis bug yang 0.3.0 ship dan 0.4.0 hapus dengan cara yang keliru. Maksimal **250 block** (10 instrument × 25 note)
 - Recipes: ingredient custom dicocokkan via `RecipeChoice.exactChoice(ItemStack)` (constructor `ExactChoice(ItemStack)` deprecated-for-removal di Paper 26.x)
 - Mobs: vanilla model + atribut custom (bukan model 3D custom seperti ModelEngine)
 - Rank tags: bitmap font glyph (`\uE000`+) di `font/default.json`, dengan referensi font vanilla dipertahankan agar teks biasa tetap tampil. Maksimal **256 rank** (U+E000–U+E0FF); lebih dari itu diabaikan + warning

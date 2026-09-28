@@ -51,13 +51,46 @@ else {
     } catch { Bad "pack.mcmeta is not valid JSON: $($_.Exception.Message)" }
 }
 
-# --- 2. blockstates/note_block.json must NOT be overridden ---
-# Vanilla ships one "" variant with no instrument keys, so any instrument-keyed override can only
-# delete the model. Custom blocks ship as an ITEM model instead (items/note_block.json select).
-Head 'note_block blockstate must stay vanilla'
+# --- 2. blockstates/note_block.json: custom variants AND the "" fallback ---
+# Custom blocks are note blocks keyed by instrument+note, the same mechanism Oraxen/ItemsAdder use.
+# The "" variant is the fallback the client resolves when no key matches, so it is what keeps every
+# other note block in the world rendering as vanilla. Losing it strips the model from all of them.
+Head 'note_block blockstate must map custom blocks and keep the "" fallback'
 $bs = Read-Entry 'assets/minecraft/blockstates/note_block.json'
-if (-not $bs) { Ok 'no note_block blockstate override - vanilla model preserved' }
-else { Bad 'note_block.json is overridden; vanilla noteblocks will lose their model' }
+if (-not $bs) { Ok 'no custom blocks in this pack - vanilla note_block.json untouched' }
+else {
+    # NOTE: this file cannot go through ConvertFrom-Json -- Windows PowerShell 5.1 (the only shell
+    # available here) refuses a property whose name is the empty string, and the "" fallback is
+    # exactly such a property. The generator emits this file without whitespace, so regex is exact.
+    if ($bs -notmatch '^\{"variants":\{.*\}\}$') { Bad 'note_block.json is not a {"variants":{...}} object' }
+    if ($bs -match '\{"model":"minecraft:block/note_block"\}') { Ok 'blockstate keeps the "" fallback for non-custom noteblocks' }
+    else { Bad 'blockstate has no "" fallback; every vanilla noteblock in the world will lose its model' }
+
+    $m = [regex]::Matches($bs, '"instrument=([^"]+)":\{"model":"minecraft:block/(cblock_[^"]+)"\}')
+    if ($m.Count) { Ok "blockstate maps $($m.Count) custom block variants" }
+    else { Bad 'blockstate has no instrument= variants; custom blocks will render as vanilla noteblocks' }
+
+    # every variant must be a well-formed instrument=,note=,powered= key pointing at a model we ship
+    $seen = @{}
+    $keys = [regex]::Matches($bs, '"([^"]*)":\{"model"') | ForEach-Object { $_.Groups[1].Value }
+    foreach ($k in $keys) {
+        if ($k -eq '') { continue }
+        if ($k -notmatch '^instrument=([^,]+),note=(\d+),powered=(true|false)$') { Bad "variant key '$k' is not in instrument=,note=,powered= form"; continue }
+        $id = '{0}:{1}' -f $Matches[1], $Matches[2]
+        if (-not $seen.ContainsKey($id)) { $seen[$id] = @() }
+        $seen[$id] += $Matches[3]
+    }
+    # both powered states must be present, or a redstone-powered block falls back to the vanilla model
+    $unpaired = @($seen.Keys | Where-Object { @($seen[$_] | Sort-Object -Unique).Count -lt 2 })
+    if ($unpaired) { Bad "these block states are missing a powered=false or powered=true variant: $($unpaired -join ', ')" }
+    elseif ($seen.Count) { Ok "every custom block state covers both powered=false and powered=true ($($seen.Count) states)" }
+
+    # and the model each variant points at has to actually exist in the pack
+    foreach ($v in $m) {
+        $model = "assets/minecraft/models/block/$($v.Groups[2].Value).json"
+        if ($names -notcontains $model) { Bad "variant '$($v.Groups[1].Value)' references $model, which the pack does not contain" }
+    }
+}
 
 $nbItem = Read-Entry 'assets/minecraft/items/note_block.json'
 if ($nbItem) {

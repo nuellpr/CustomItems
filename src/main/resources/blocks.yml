@@ -1,5 +1,7 @@
 # Custom blocks (noteblock-based, texture 16x16 PNG in textures/)
-# Each block gets its own noteblock state (instrument+note) so many blocks are possible.
+# Each block gets its own noteblock state (instrument+note) and the resource pack maps
+# that state to a real block model, so a placed block renders as the custom model in-world.
+# Maximum 250 blocks (10 instruments x 25 notes); beyond that the plugin stops loading and warns.
 # NOTE: a placed noteblock stores its identity in the blockstate itself — there is no
 # block entity to hold custom data. Do not change a custom block's instrument/note in
 # this file after players have built with it; existing blocks would change appearance.

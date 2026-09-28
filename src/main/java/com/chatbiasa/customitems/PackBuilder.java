@@ -64,12 +64,30 @@ public final class PackBuilder {
                     }
                 }
             }
-            // Custom blocks are noteblocks rendered as a custom ITEM model. blockstates/note_block.json
-            // is deliberately NOT overridden: vanilla has a single "" variant with no `instrument=`
-            // keys, so an instrument-keyed override can only ever strip the model (invisible blocks).
-            // The blockstate the player sees in-world is vanilla; the held item is the custom model.
+            // Custom blocks are note blocks whose instrument+note blockstate selects our own model --
+            // the same mechanism Oraxen and ItemsAdder use. A note block has no block entity, so the
+            // blockstate is the only identity it can carry, and it has enough combinations
+            // (instrument x note x powered) to key a real model.
+            // The "" variant is REQUIRED, not decoration: it is the fallback the client falls back to
+            // when no other key matches the block's state. Vanilla note_block.json carries only "" and
+            // still renders every note block in the game, which is the proof the fallback works.
+            // Without it this file would match nothing and strip the model from every note block.
             if (!plugin.blocks().all().isEmpty()) {
                 List<Blocks.BlockDef> blocks = plugin.blocks().all();
+                StringBuilder variants = new StringBuilder("\"\":{\"model\":\"minecraft:block/note_block\"}");
+                for (Blocks.BlockDef def : blocks) {
+                    String model = "minecraft:block/cblock_" + def.key();
+                    // both powered values, otherwise a redstone-powered custom block silently
+                    // falls back to the vanilla noteblock model
+                    for (String powered : new String[]{"false", "true"}) {
+                        variants.append(",\"instrument=").append(def.instrument())
+                                .append(",note=").append(def.note())
+                                .append(",powered=").append(powered)
+                                .append("\":{\"model\":\"").append(model).append("\"}");
+                    }
+                }
+                put(zip, "assets/minecraft/blockstates/note_block.json",
+                        "{\"variants\":{" + variants + "}}");
                 StringBuilder blockCases = new StringBuilder();
                 for (Blocks.BlockDef def : blocks) {
                     if (!blockCases.isEmpty()) blockCases.append(',');

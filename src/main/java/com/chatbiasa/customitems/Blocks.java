@@ -23,18 +23,19 @@ import java.util.Set;
 public final class Blocks {
 
     /**
-     * Noteblock instrument name -> Bukkit Instrument enum name. Only used to turn a placed
-     * noteblock back into a lookup key; the pack does not emit a note_block blockstate, because
-     * vanilla has a single "" variant with no instrument keys and any override could only delete
-     * the model. Newer instruments (trumpet, zombie, ...) are not listed — we only ever stamp the
-     * ten below, and anything else falls back to "harp".
+     * Noteblock instrument name -> Bukkit Instrument enum name, covering all 27 values the
+     * instrument blockstate accepts. Only used to turn a placed noteblock back into a lookup key.
+     * Missing one would make {@link #stateName} fall back to "harp" and misreport the block, so
+     * this table is kept in sync with org.bukkit.Instrument.
      */
     static final String[][] ALL_INSTRUMENTS = {
             {"harp", "PIANO"}, {"basedrum", "BASS_DRUM"}, {"snare", "SNARE_DRUM"}, {"hat", "STICKS"},
             {"bass", "BASS_GUITAR"}, {"flute", "FLUTE"}, {"bell", "BELL"}, {"guitar", "GUITAR"},
             {"chime", "CHIME"}, {"xylophone", "XYLOPHONE"}, {"iron_xylophone", "IRON_XYLOPHONE"},
             {"cow_bell", "COW_BELL"}, {"didgeridoo", "DIDGERIDOO"}, {"bit", "BIT"}, {"banjo", "BANJO"},
-            {"pling", "PLING"}, {"zombie", "ZOMBIE"}, {"skeleton", "SKELETON"}, {"creeper", "CREEPER"},
+            {"pling", "PLING"}, {"trumpet", "TRUMPET"}, {"trumpet_exposed", "TRUMPET_EXPOSED"},
+            {"trumpet_oxidized", "TRUMPET_OXIDIZED"}, {"trumpet_weathered", "TRUMPET_WEATHERED"},
+            {"zombie", "ZOMBIE"}, {"skeleton", "SKELETON"}, {"creeper", "CREEPER"},
             {"dragon", "DRAGON"}, {"wither_skeleton", "WITHER_SKELETON"}, {"piglin", "PIGLIN"},
             {"custom_head", "CUSTOM_HEAD"}
     };
@@ -46,6 +47,14 @@ public final class Blocks {
             {"chime", "CHIME"}, {"xylophone", "XYLOPHONE"}, {"iron_xylophone", "IRON_XYLOPHONE"},
             {"flute", "FLUTE"}
     };
+
+    /**
+     * A custom block is identified purely by its note block blockstate, so the number of distinct
+     * blocks is capped by the states we assign: INSTRUMENTS.length * 25 notes. Past that the
+     * instrument/note pair wraps around and silently overwrites an earlier block's identity, so
+     * we stop instead.
+     */
+    public static final int MAX_BLOCKS = INSTRUMENTS.length * 25;
 
     public record BlockDef(String key, String texture, Component name, String instrument, int note) {}
 
@@ -77,6 +86,12 @@ public final class Blocks {
         for (String key : root.getKeys(false)) {
             ConfigurationSection s = root.getConfigurationSection(key);
             if (s == null) continue;
+            if (i >= MAX_BLOCKS) {
+                plugin.getLogger().warning("Too many blocks: '" + key + "' and later entries are ignored. "
+                        + "Maximum is " + MAX_BLOCKS + " (" + INSTRUMENTS.length + " instruments x 25 notes), "
+                        + "past which blocks would share a noteblock state.");
+                break;
+            }
             String[] inst = INSTRUMENTS[i % INSTRUMENTS.length];
             int note = (i / INSTRUMENTS.length) % 25;
             String lower = key.toLowerCase();
