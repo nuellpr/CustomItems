@@ -43,7 +43,7 @@ mekanisme lain (mis. data-driven block via plugin), di luar cakupan plugin ini.
 
 ## Install
 
-1. Download `CustomItems-0.6.0.jar` dari [Releases](../../releases), taruh di folder `plugins/`
+1. Download `CustomItems-0.7.0.jar` dari [Releases](../../releases), taruh di folder `plugins/`
 2. Start server → folder `plugins/CustomItems/` tergenerate
 3. Untuk server online: **wajib** set `external-url` di `config.yml` ke IP/URL publik (mis. `http://play.myserver.com:8077`) dan buka port-nya. Kalau dibiarkan kosong, plugin memakai bind IP server dan hanya berfungsi untuk pemain di mesin yang sama — URL `http://0.0.0.0:8077` tidak bisa di-download client.
 4. `/ci reload`
@@ -58,6 +58,18 @@ mekanisme lain (mis. data-driven block via plugin), di luar cakupan plugin ini.
 | Pack URL `http://0.0.0.0:8077` | Client tidak bisa mengunduh pack | `0.0.0.0`/`::` diganti loopback + warning, trailing slash dan `/pack.zip` ganda dinormalkan |
 | `/ci menu` crash | `createInventory` melempar error di atas 54 slot saat item+block > 54 | Ukuran dibatasi 54 + warning |
 | Build gagal tanpa Gradle | `gradle` tidak ada di PATH dan repo tidak punya wrapper | Lihat "Build dari source" — bisa pakai `javac` langsung |
+
+## Perubahan 0.7.0 (kemampuan CLI & GUI)
+
+| Perubahan | Detail |
+|---|---|
+| **Tab completion** | `/ci <Tab>` mengisi subcommand, nama item/block untuk `give`, mob untuk `spawn`, sound untuk `play`, dan nama player online untuk `give <item> <player>`. Difilter case-insensitive |
+| **`/ci list`** | Menampilkan semua key yang termuat: item, block, mob, sound, rank, emoji |
+| **GUI paging** | Dulu `/ci menu` memotong di 54 entry. Sekarang 45 per halaman dengan tombol `<` `>`; inventory holder jadi per-pemain supaya dua player tidak saling menimpa halaman |
+| **Custom mob bertahan setelah restart** | Tipe dan posisi tersimpan di world, tapi nama/HP/speed hanya ada di memori — setelah restart mob custom jadi zombie biasa. `ChunkLoadEvent` membaca tag PDC `cmob` dan menerapkan ulang atribut. Key yang sudah dihapus dari `mobs.yml` dibiarkan apa adanya |
+| **`Test-Pack.ps1` cek glyph** | Menandai `FAIL` kalau ada codepoint di luar U+E000–U+E1FF (artinya >256 rank/emoji dan glyph bocor ke CJK) atau ada codepoint duplikat (dua entry merebut satu slot) |
+
+> Batas 256 per kategori ditegakkan di loader (`Ranks.MAX_GLYPHS` / `Emojis.MAX_GLYPHS`), jadi pack yang lolos validasi memang aman. Cek di `Test-Pack.ps1` menangkap pack yang dibangun versi lama atau oleh skrip lain.
 
 ## Perubahan 0.6.0 (fix race, config, dan chat)
 
@@ -188,6 +200,9 @@ Texture PNG ditaruh di `plugins/CustomItems/textures/`, lalu `/ci reload` — pa
 | `/ci menu` | Buka GUI semua isi |
 | `/ci reload` | Reload `config.yml` + semua yml, rebuild pack, kirim ulang ke player online |
 | `/ci pack` | Kirim ulang resource pack ke player online tanpa rebuild |
+| `/ci list` | Tampilkan semua key item, block, mob, sound, rank, emoji yang termuat |
+
+Semua subcommand punya tab completion.
 
 Semua butuh permission `ci.admin` (default: op).
 
@@ -216,7 +231,7 @@ Kode keluar `0` = aman dibagikan ke pemain, `1` = ada masalah. Jalankan ini sete
 gradle build
 ```
 
-Butuh Gradle 9.x + Java 25. Hasil di `build/libs/CustomItems-0.6.0.jar`.
+Butuh Gradle 9.x + Java 25. Hasil di `build/libs/CustomItems-0.7.0.jar`.
 
 Kalau Gradle tidak terpasang (repo ini belum punya wrapper), bisa kompilasi langsung dengan JDK 25:
 

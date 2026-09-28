@@ -7,20 +7,23 @@ import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.EntityType;
 import org.bukkit.entity.LivingEntity;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.Listener;
+import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
 import java.util.Collection;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
-public final class Mobs {
+public final class Mobs implements Listener {
 
     public record MobDef(String key, EntityType type, Component name, double health, double speed) {}
 
     private final CustomItemsPlugin plugin;
-    private final Map<String, MobDef> byKey = new HashMap<>();
+    private final Map<String, MobDef> byKey = new LinkedHashMap<>();
 
     public Mobs(CustomItemsPlugin plugin) {
         this.plugin = plugin;
@@ -75,6 +78,12 @@ public final class Mobs {
 
     public LivingEntity spawn(MobDef def, org.bukkit.Location loc) {
         LivingEntity e = (LivingEntity) loc.getWorld().spawnEntity(loc, def.type());
+        apply(e, def);
+        e.getPersistentDataContainer().set(plugin.mobKey(), PersistentDataType.STRING, def.key());
+        return e;
+    }
+
+    private void apply(LivingEntity e, MobDef def) {
         e.customName(def.name());
         e.setCustomNameVisible(true);
         e.setPersistent(true);
@@ -86,7 +95,20 @@ public final class Mobs {
         }
         var speed = e.getAttribute(Attribute.MOVEMENT_SPEED);
         if (speed != null) speed.setBaseValue(def.speed());
-        e.getPersistentDataContainer().set(plugin.mobKey(), PersistentDataType.STRING, def.key());
-        return e;
+    }
+
+    /** A mob that survives a restart comes back as a vanilla zombie: attributes and custom name
+     *  live in memory only, while the type and position are saved by the world. The PDC tag is
+     *  what makes re-applying possible, so ChunkLoadEvent is where it has to happen. */
+    @EventHandler
+    public void onChunkLoad(ChunkLoadEvent e) {
+        for (var ent : e.getChunk().getEntities()) {
+            if (!(ent instanceof LivingEntity le)) continue;
+            String key = le.getPersistentDataContainer().get(plugin.mobKey(), PersistentDataType.STRING);
+            if (key == null) continue;
+            MobDef def = byKey.get(key.toLowerCase());
+            // a key removed from mobs.yml is left alone: it is now just a vanilla mob
+            if (def != null) apply(le, def);
+        }
     }
 }

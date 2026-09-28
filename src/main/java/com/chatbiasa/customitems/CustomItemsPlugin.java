@@ -42,6 +42,7 @@ public final class CustomItemsPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new JoinListener(this), this);
         getServer().getPluginManager().registerEvents(new BlockListener(this), this);
         getServer().getPluginManager().registerEvents(new ChatListener(this), this);
+        getServer().getPluginManager().registerEvents(mobs, this);
         gui = new GuiMenu(this);
         getServer().getPluginManager().registerEvents(gui, this);
         getCommand("ci").setExecutor(new GiveCommand(this));

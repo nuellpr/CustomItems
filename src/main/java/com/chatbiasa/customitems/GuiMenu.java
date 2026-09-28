@@ -1,6 +1,7 @@
 package com.chatbiasa.customitems;
 
 import net.kyori.adventure.text.Component;
+import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -9,52 +10,102 @@ import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
 
-public final class GuiMenu implements InventoryHolder, Listener {
+import java.util.ArrayList;
+import java.util.List;
 
-    /** largest chest inventory the server accepts */
-    private static final int MAX_SIZE = 54;
+public final class GuiMenu implements Listener {
+
+    /** rows of entries; the last row holds the page arrows */
+    private static final int PAGE_ROWS = 5;
+    private static final int PER_PAGE = PAGE_ROWS * 9;
+    private static final int PREV_SLOT = PER_PAGE;
+    private static final int NEXT_SLOT = PER_PAGE + 8;
 
     private final CustomItemsPlugin plugin;
-    private Inventory inv;
 
     public GuiMenu(CustomItemsPlugin plugin) {
         this.plugin = plugin;
     }
 
-    public void open(Player player) {
-        int count = plugin.items().all().size() + plugin.blocks().all().size();
-        // createInventory throws above 54 slots; clamp so /ci menu can never hard-error.
-        int size = Math.min(MAX_SIZE, Math.max(9, ((count - 1) / 9 + 1) * 9));
-        if (count > MAX_SIZE) {
-            plugin.getLogger().warning("/ci menu shows only the first " + MAX_SIZE + " of " + count
-                    + " entries; raise the GUI limit by adding paging.");
+    /** One open window. Per-player rather than one shared instance, so two players looking at
+     *  different pages do not fight over a single Inventory field. */
+    private static final class Menu implements InventoryHolder {
+        private final Player viewer;
+        private final List<ItemStack> entries;
+        private final int page;
+        private Inventory inv;
+
+        Menu(Player viewer, List<ItemStack> entries, int page) {
+            this.viewer = viewer;
+            this.entries = entries;
+            this.page = page;
         }
-        inv = plugin.getServer().createInventory(this, size, Component.text("CustomItems"));
-        for (ItemDef def : plugin.items().all()) {
-            if (inv.firstEmpty() < 0) break;
-            inv.addItem(plugin.items().stack(def));
+
+        int page() {
+            return page;
         }
-        for (Blocks.BlockDef def : plugin.blocks().all()) {
-            if (inv.firstEmpty() < 0) break;
-            inv.addItem(plugin.blocks().stack(def));
+
+        Player viewer() {
+            return viewer;
         }
-        player.openInventory(inv);
+
+        @Override
+        public Inventory getInventory() {
+            return inv;
+        }
     }
 
-    @Override
-    public Inventory getInventory() {
-        return inv;
+    private static List<ItemStack> entries(CustomItemsPlugin plugin) {
+        List<ItemStack> list = new ArrayList<>();
+        for (ItemDef def : plugin.items().all()) list.add(plugin.items().stack(def));
+        for (Blocks.BlockDef def : plugin.blocks().all()) list.add(plugin.blocks().stack(def));
+        return list;
+    }
+
+    public void open(Player player) {
+        show(player, 0);
+    }
+
+    private void show(Player player, int page) {
+        List<ItemStack> entries = entries(plugin);
+        int pages = Math.max(1, (entries.size() + PER_PAGE - 1) / PER_PAGE);
+        int p = Math.clamp(page, 0, pages - 1);
+        Menu menu = new Menu(player, entries, p);
+        int size = entries.size() > PER_PAGE ? (PAGE_ROWS + 1) * 9 : Math.max(9, ((entries.size() - 1) / 9 + 1) * 9);
+        menu.inv = plugin.getServer().createInventory(menu, size,
+                Component.text("CustomItems " + (p + 1) + "/" + pages));
+        for (int i = p * PER_PAGE; i < Math.min(entries.size(), (p + 1) * PER_PAGE); i++) {
+            menu.inv.setItem(i - p * PER_PAGE, entries.get(i));
+        }
+        if (p > 0) menu.inv.setItem(PREV_SLOT, nav(Material.ARROW, "Previous page"));
+        if (p < pages - 1) menu.inv.setItem(NEXT_SLOT, nav(Material.ARROW, "Next page"));
+        player.openInventory(menu.inv);
+    }
+
+    private static ItemStack nav(Material mat, String name) {
+        ItemStack s = ItemStack.of(mat);
+        s.setData(io.papermc.paper.datacomponent.DataComponentTypes.CUSTOM_NAME,
+                Component.text(name).decoration(net.kyori.adventure.text.format.TextDecoration.ITALIC, false));
+        return s;
     }
 
     @EventHandler
     public void onClick(InventoryClickEvent e) {
-        if (!(e.getView().getTopInventory().getHolder() instanceof GuiMenu)) return;
+        if (!(e.getView().getTopInventory().getHolder() instanceof Menu menu)) return;
         // Only the menu itself is read-only. Clicks in the player's own inventory must stay live,
         // otherwise shift-clicking to rearrange a hotbar is silently dead while the menu is open.
-        if (e.getClickedInventory() == e.getView().getTopInventory()) e.setCancelled(true);
+        if (e.getClickedInventory() != e.getView().getTopInventory()) return;
+        e.setCancelled(true);
+        if (e.getSlot() == PREV_SLOT) {
+            show(menu.viewer(), menu.page() - 1);
+            return;
+        }
+        if (e.getSlot() == NEXT_SLOT) {
+            show(menu.viewer(), menu.page() + 1);
+            return;
+        }
         ItemStack cur = e.getCurrentItem();
         if (cur == null || cur.getType().isAir() || !(e.getWhoClicked() instanceof Player p)) return;
-        if (e.getClickedInventory() != e.getView().getTopInventory()) return;
         p.getInventory().addItem(cur.clone());
     }
 }

@@ -93,10 +93,32 @@ else {
         }
         $bitmaps = @($j.providers | Where-Object { $_.type -eq 'bitmap' })
         Ok "$($bitmaps.Count) custom bitmap provider(s)"
+        $chars = New-Object System.Collections.Generic.List[int]
         foreach ($p in $bitmaps) {
             $f = ([string]$p.file) -replace '^minecraft:', ''
             if (-not ($names -contains "assets/minecraft/textures/$f")) { Bad "font provider file missing: $f" }
             if ($null -eq $p.height) { Warn "provider for $f has no 'height' - PNG height must equal 'ascent'" }
+            foreach ($c in @($p.chars)) { $chars.Add([int][char]([string]$c)[0]) }
+        }
+        # Ranks take U+E000+, emojis U+E100+. Only 256 codepoints exist in each range, so entry 257
+        # spills into CJK (U+0F00) and shifts every later glyph. Duplicated codepoints are the same
+        # bug seen from the other side: two entries claim one slot and the second one wins.
+        if ($chars.Count) {
+            $strays = @($chars | Where-Object { $_ -lt 0xE000 -or $_ -gt 0xE1FF } | Select-Object -Unique)
+            if ($strays.Count -eq 0) {
+                $ranks = @($chars | Where-Object { $_ -ge 0xE000 -and $_ -le 0xE0FF }).Count
+                $emojis = @($chars | Where-Object { $_ -ge 0xE100 -and $_ -le 0xE1FF }).Count
+                Ok "all $($chars.Count) glyph codepoints inside U+E000-U+E1FF ($ranks rank, $emojis emoji)"
+            } else {
+                $list = ($strays | ForEach-Object { 'U+{0:X4}' -f $_ }) -join ', '
+                Bad "glyph codepoints outside the private use area: $list - more than 256 rank/emoji entries"
+            }
+            $dupes = @($chars | Group-Object | Where-Object { $_.Count -gt 1 })
+            if ($dupes.Count -eq 0) { Ok 'no duplicated glyph codepoints' }
+            else {
+                $list = ($dupes | ForEach-Object { 'U+{0:X4}x{1}' -f [int]$_.Name, $_.Count }) -join ', '
+                Bad "duplicated glyph codepoints: $list - entries overwrite each other"
+            }
         }
     } catch { Bad "font/default.json is not valid JSON: $($_.Exception.Message)" }
 }
