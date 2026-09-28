@@ -206,6 +206,8 @@ Semua subcommand punya tab completion.
 
 Semua butuh permission `ci.admin` (default: op).
 
+Tidak ada permission per item. Semua isi plugin bersifat publik: siapa pun yang memegang item/block/sound-nya bisa memakainya, dan rank tag hanya butuh `ci.rank.<key>`. Kalau nanti butuh gating per item (misalnya hanya untuk VIP), permission per key adalah tambahan kecil — bukan mengubah perilaku yang sekarang.
+
 ## Tools
 
 Ada di `tools/`, semuanya PowerShell dan tanpa dependency.
