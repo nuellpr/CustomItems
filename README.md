@@ -43,7 +43,7 @@ mekanisme lain (mis. data-driven block via plugin), di luar cakupan plugin ini.
 
 ## Install
 
-1. Download `CustomItems-0.5.0.jar` dari [Releases](../../releases), taruh di folder `plugins/`
+1. Download `CustomItems-0.6.0.jar` dari [Releases](../../releases), taruh di folder `plugins/`
 2. Start server → folder `plugins/CustomItems/` tergenerate
 3. Untuk server online: **wajib** set `external-url` di `config.yml` ke IP/URL publik (mis. `http://play.myserver.com:8077`) dan buka port-nya. Kalau dibiarkan kosong, plugin memakai bind IP server dan hanya berfungsi untuk pemain di mesin yang sama — URL `http://0.0.0.0:8077` tidak bisa di-download client.
 4. `/ci reload`
@@ -58,6 +58,18 @@ mekanisme lain (mis. data-driven block via plugin), di luar cakupan plugin ini.
 | Pack URL `http://0.0.0.0:8077` | Client tidak bisa mengunduh pack | `0.0.0.0`/`::` diganti loopback + warning, trailing slash dan `/pack.zip` ganda dinormalkan |
 | `/ci menu` crash | `createInventory` melempar error di atas 54 slot saat item+block > 54 | Ukuran dibatasi 54 + warning |
 | Build gagal tanpa Gradle | `gradle` tidak ada di PATH dan repo tidak punya wrapper | Lihat "Build dari source" — bisa pakai `javac` langsung |
+
+## Perubahan 0.6.0 (fix race, config, dan chat)
+
+| Bug | Gejala | Perbaikan |
+|---|---|---|
+| `/ci reload` bisa crash saat ada chat | `AsyncChatEvent` mengiterasi `LinkedHashMap` rank/emoji dari thread chat, sementara `load()` melakukan `clear()` + refill dari thread utama → `ConcurrentModificationException` | `Ranks`/`Emojis` membangun map baru lalu **menukar seluruhnya** (volatile). Pembaca selalu melihat snapshot utuh, tidak pernah setengah terisi |
+| `type: BOAT` di `mobs.yml` bikin crash saat spawn | `EntityType.valueOf("BOAT")` sukses, lalu `(LivingEntity)` cast melempar `ClassCastException` — jauh setelah typo-nya dibuat | Type divalidasi di `load()`: wajib `isSpawnable()` + subclass `LivingEntity`, kalau tidak di-skip + warning |
+| Chat kehilangan bold/italic/warna | Emoji replacement melakukan roundtrip `PlainTextComponentSerializer`, meratakan seluruh component | `Component.replaceText` men-edit node teks di tempatnya; format pemain tetap utuh |
+| `/ci reload` abaikan perubahan `config.yml` | `reloadConfig()` tidak pernah dipanggil, jadi `port`/`external-url`/`pack-format` yang diedit tidak terpakai | `reloadConfig()` dipanggil sebelum `loadItems()` |
+| Pack tidak dikirim ke player yang sudah online | Pack hanya dikirim di `PlayerJoinEvent`, jadi pemain yang online saat reload memakai texture lama | Setelah rebuild, pack dikirim ulang ke semua player online + pesan menyebut jumlahnya |
+| `/ci menu` membekukan inventory pemain | `setCancelled(true)` membatalkan klik di **seluruh** view, termasuk inventory sendiri — shift-click buat rapiin hotbar mati | Hanya klik di inventory menu yang dibatalkan |
+| Attribute mob yang hilang bikin NPE | `getAttribute(...)` bisa `null` untuk sebagian tipe mob | Null-guard, jatuh ke nilai vanilla |
 
 ## Perubahan 0.5.0 (fix dupe & overflow glyph)
 
@@ -174,7 +186,8 @@ Texture PNG ditaruh di `plugins/CustomItems/textures/`, lalu `/ci reload` — pa
 | `/ci spawn <mob>` | Spawn mob custom |
 | `/ci play <sound>` | Mainkan sound custom |
 | `/ci menu` | Buka GUI semua isi |
-| `/ci reload` | Reload config + rebuild pack |
+| `/ci reload` | Reload `config.yml` + semua yml, rebuild pack, kirim ulang ke player online |
+| `/ci pack` | Kirim ulang resource pack ke player online tanpa rebuild |
 
 Semua butuh permission `ci.admin` (default: op).
 
@@ -203,7 +216,7 @@ Kode keluar `0` = aman dibagikan ke pemain, `1` = ada masalah. Jalankan ini sete
 gradle build
 ```
 
-Butuh Gradle 9.x + Java 25. Hasil di `build/libs/CustomItems-0.5.0.jar`.
+Butuh Gradle 9.x + Java 25. Hasil di `build/libs/CustomItems-0.6.0.jar`.
 
 Kalau Gradle tidak terpasang (repo ini belum punya wrapper), bisa kompilasi langsung dengan JDK 25:
 

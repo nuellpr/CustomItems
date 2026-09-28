@@ -6,7 +6,8 @@ description: ItemsAdder-style custom items with auto resource pack hosting.
 commands:
   ci:
     description: CustomItems command
-    usage: /ci give <item> [player] | /ci spawn <mob> | /ci menu | /ci reload
+    usage: /ci give <item> [player] | /ci spawn <mob> | /ci play <sound> | /ci menu | /ci reload | /ci pack
 permissions:
   ci.admin:
     default: op
+

@@ -19,12 +19,16 @@ public final class JoinListener implements Listener {
 
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
+        send(plugin, event.getPlayer());
+    }
+
+    /** Queue the current pack for one player. addResourcePack is the non-deprecated path: it queues
+     *  the pack and lets the client prompt. force=false so players can decline; they keep playing
+     *  with vanilla textures instead. */
+    public static void send(CustomItemsPlugin plugin, org.bukkit.entity.Player p) {
         byte[] sha1 = plugin.pack().sha1;
         String url = plugin.packUrl();
         if (sha1 == null || url == null) return;
-        // addResourcePack is the non-deprecated path: it queues the pack and lets the client prompt.
-        // force=false so players can decline; they keep playing with vanilla textures instead.
-        event.getPlayer().addResourcePack(PACK_ID, url, sha1,
-                "CustomItems resource pack", false);
+        p.addResourcePack(PACK_ID, url, sha1, "CustomItems resource pack", false);
     }
 }

@@ -16,29 +16,32 @@ public final class Emojis {
     public static final int MAX_GLYPHS = 256;
 
     private final CustomItemsPlugin plugin;
-    private final Map<String, EmojiDef> emojis = new LinkedHashMap<>();
+    /** Swapped wholesale by load(); see Ranks.ranks for why it is not refilled in place. */
+    private volatile Map<String, EmojiDef> emojis = new LinkedHashMap<>();
 
     public Emojis(CustomItemsPlugin plugin) {
         this.plugin = plugin;
     }
 
     public void load() {
-        emojis.clear();
+        Map<String, EmojiDef> next = new LinkedHashMap<>();
         File f = new File(plugin.getDataFolder(), "emojis.yml");
         if (!f.exists()) plugin.saveResource("emojis.yml", false);
         YamlConfiguration yml = YamlConfiguration.loadConfiguration(f);
-        if (yml.getConfigurationSection("emojis") == null) return;
-        for (String key : yml.getConfigurationSection("emojis").getKeys(false)) {
-            if (emojis.size() >= MAX_GLYPHS) {
-                plugin.getLogger().warning("emojis.yml: only the first " + MAX_GLYPHS
-                        + " emojis are loaded; '" + key + "' and later ones have no free glyph.");
-                break;
+        if (yml.getConfigurationSection("emojis") != null) {
+            for (String key : yml.getConfigurationSection("emojis").getKeys(false)) {
+                if (next.size() >= MAX_GLYPHS) {
+                    plugin.getLogger().warning("emojis.yml: only the first " + MAX_GLYPHS
+                            + " emojis are loaded; '" + key + "' and later ones have no free glyph.");
+                    break;
+                }
+                String tex = yml.getString("emojis." + key + ".texture", key + ".png");
+                int ascent = yml.getInt("emojis." + key + ".ascent", 8);
+                next.put(key.toLowerCase(), new EmojiDef(key.toLowerCase(), tex, ascent));
             }
-            String tex = yml.getString("emojis." + key + ".texture", key + ".png");
-            int ascent = yml.getInt("emojis." + key + ".ascent", 8);
-            emojis.put(key.toLowerCase(), new EmojiDef(key.toLowerCase(), tex, ascent));
         }
-        plugin.getLogger().info("Loaded " + emojis.size() + " emojis");
+        emojis = next;
+        plugin.getLogger().info("Loaded " + next.size() + " emojis");
     }
 
     public List<EmojiDef> all() {

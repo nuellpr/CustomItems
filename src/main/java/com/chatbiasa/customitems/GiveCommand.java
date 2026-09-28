@@ -15,6 +15,17 @@ public final class GiveCommand implements CommandExecutor {
         this.plugin = plugin;
     }
 
+    /** Push the freshly built pack to everyone already online. Without this, a reload only reaches
+     *  players who happen to rejoin, so their textures stay stale until then. */
+    private int resendPack() {
+        int n = 0;
+        for (Player p : plugin.getServer().getOnlinePlayers()) {
+            JoinListener.send(plugin, p);
+            n++;
+        }
+        return n;
+    }
+
     @Override
     public boolean onCommand(CommandSender sender, Command cmd, String label, String[] args) {
         if (!sender.hasPermission("ci.admin")) {
@@ -22,13 +33,21 @@ public final class GiveCommand implements CommandExecutor {
             return true;
         }
         if (args.length >= 1 && args[0].equalsIgnoreCase("reload")) {
+            plugin.reloadConfig();
             plugin.loadItems();
             try {
                 plugin.pack().build();
-                sender.sendMessage(Component.text("Reloaded items and rebuilt pack."));
+                int n = resendPack();
+                sender.sendMessage(Component.text("Reloaded items and rebuilt pack; re-sent to "
+                        + n + " online player(s)."));
             } catch (Exception e) {
                 sender.sendMessage(Component.text("Reload failed: " + e.getMessage()));
             }
+            return true;
+        }
+        if (args.length >= 1 && args[0].equalsIgnoreCase("pack")) {
+            int n = resendPack();
+            sender.sendMessage(Component.text("Re-sent resource pack to " + n + " player(s)."));
             return true;
         }
         if (args.length >= 1 && args[0].equalsIgnoreCase("menu")) {
@@ -73,7 +92,7 @@ public final class GiveCommand implements CommandExecutor {
             return true;
         }
         if (args.length < 2) {
-            sender.sendMessage(Component.text("Usage: /" + label + " give <item> [player] | /" + label + " spawn <mob> | /" + label + " play <sound> | /" + label + " menu | /" + label + " reload"));
+            sender.sendMessage(Component.text("Usage: /" + label + " give <item> [player] | /" + label + " spawn <mob> | /" + label + " play <sound> | /" + label + " menu | /" + label + " reload | /" + label + " pack"));
             return true;
         }
         ItemDef def = plugin.items().get(args[1]);

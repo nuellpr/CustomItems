@@ -49,9 +49,12 @@ public final class GuiMenu implements InventoryHolder, Listener {
     @EventHandler
     public void onClick(InventoryClickEvent e) {
         if (!(e.getView().getTopInventory().getHolder() instanceof GuiMenu)) return;
-        e.setCancelled(true);
+        // Only the menu itself is read-only. Clicks in the player's own inventory must stay live,
+        // otherwise shift-clicking to rearrange a hotbar is silently dead while the menu is open.
+        if (e.getClickedInventory() == e.getView().getTopInventory()) e.setCancelled(true);
         ItemStack cur = e.getCurrentItem();
         if (cur == null || cur.getType().isAir() || !(e.getWhoClicked() instanceof Player p)) return;
+        if (e.getClickedInventory() != e.getView().getTopInventory()) return;
         p.getInventory().addItem(cur.clone());
     }
 }

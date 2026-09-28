@@ -17,29 +17,35 @@ public final class Ranks {
     public static final int MAX_GLYPHS = 256;
 
     private final CustomItemsPlugin plugin;
-    private final Map<String, RankDef> ranks = new LinkedHashMap<>();
+    /** Swapped wholesale by load(). AsyncChatEvent reads this from a chat thread while /ci reload
+     *  runs on the main thread, so it must never be cleared-and-refilled in place: a reader would
+     *  either throw ConcurrentModificationException or miss a rank. `next` is published only once
+     *  fully built and is never mutated afterwards, so readers always see one complete snapshot. */
+    private volatile Map<String, RankDef> ranks = new LinkedHashMap<>();
 
     public Ranks(CustomItemsPlugin plugin) {
         this.plugin = plugin;
     }
 
     public void load() {
-        ranks.clear();
+        Map<String, RankDef> next = new LinkedHashMap<>();
         File f = new File(plugin.getDataFolder(), "ranks.yml");
         if (!f.exists()) plugin.saveResource("ranks.yml", false);
         YamlConfiguration yml = YamlConfiguration.loadConfiguration(f);
-        if (yml.getConfigurationSection("ranks") == null) return;
-        for (String key : yml.getConfigurationSection("ranks").getKeys(false)) {
-            if (ranks.size() >= MAX_GLYPHS) {
-                plugin.getLogger().warning("ranks.yml: only the first " + MAX_GLYPHS
-                        + " ranks are loaded; '" + key + "' and later ones have no free glyph.");
-                break;
+        if (yml.getConfigurationSection("ranks") != null) {
+            for (String key : yml.getConfigurationSection("ranks").getKeys(false)) {
+                if (next.size() >= MAX_GLYPHS) {
+                    plugin.getLogger().warning("ranks.yml: only the first " + MAX_GLYPHS
+                            + " ranks are loaded; '" + key + "' and later ones have no free glyph.");
+                    break;
+                }
+                String tex = yml.getString("ranks." + key + ".texture", key + ".png");
+                int ascent = yml.getInt("ranks." + key + ".ascent", 8);
+                next.put(key.toLowerCase(), new RankDef(key.toLowerCase(), tex, ascent));
             }
-            String tex = yml.getString("ranks." + key + ".texture", key + ".png");
-            int ascent = yml.getInt("ranks." + key + ".ascent", 8);
-            ranks.put(key.toLowerCase(), new RankDef(key.toLowerCase(), tex, ascent));
         }
-        plugin.getLogger().info("Loaded " + ranks.size() + " rank tags");
+        ranks = next;
+        plugin.getLogger().info("Loaded " + next.size() + " rank tags");
     }
 
     public List<RankDef> all() {

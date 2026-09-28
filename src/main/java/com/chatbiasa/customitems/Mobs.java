@@ -45,6 +45,14 @@ public final class Mobs {
                 plugin.getLogger().warning("mobs.yml: unknown type for '" + key + "'");
                 continue;
             }
+            // health/speed are LivingEntity attributes, so a non-living type (BOAT, ITEM, ARMOR_STAND)
+            // would blow up as a ClassCastException at spawn time, long after the typo was made
+            Class<?> cls = type.getEntityClass();
+            if (!type.isSpawnable() || cls == null || !LivingEntity.class.isAssignableFrom(cls)) {
+                plugin.getLogger().warning("mobs.yml: type " + type + " for '" + key
+                        + "' is not a spawnable living entity");
+                continue;
+            }
             MobDef def = new MobDef(
                     key.toLowerCase(),
                     type,
@@ -70,9 +78,14 @@ public final class Mobs {
         e.customName(def.name());
         e.setCustomNameVisible(true);
         e.setPersistent(true);
-        e.getAttribute(Attribute.MAX_HEALTH).setBaseValue(def.health());
-        e.setHealth(def.health());
-        e.getAttribute(Attribute.MOVEMENT_SPEED).setBaseValue(def.speed());
+        // an attribute can be absent for some mob types, so fall back to the vanilla value
+        var health = e.getAttribute(Attribute.MAX_HEALTH);
+        if (health != null) {
+            health.setBaseValue(def.health());
+            e.setHealth(def.health());
+        }
+        var speed = e.getAttribute(Attribute.MOVEMENT_SPEED);
+        if (speed != null) speed.setBaseValue(def.speed());
         e.getPersistentDataContainer().set(plugin.mobKey(), PersistentDataType.STRING, def.key());
         return e;
     }
