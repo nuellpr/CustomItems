@@ -196,7 +196,23 @@ mobs:
     name: "<dark_purple>Guardian"
     health: 40.0
     speed: 0.3
+    drops:
+      - item: ruby_sword       # key item/block custom atau material vanilla
+        amount: 1
+        chance: 0.25           # 0.0–1.0, peluang untuk setiap entry
+      - item: GOLD_INGOT
+        amount: 2
+        chance: 1.0
+    skill:
+      on-hit:
+        effect: poison         # diberikan ke target yang terkena serangan mob
+        amplifier: 0            # 0 = level I
+        duration: 100           # tick
+        chance: 0.25
+        cooldown: 5             # detik per mob
 ```
+
+`drops` menambahkan hasil drop di samping loot vanilla. `item` menerima key dari `items.yml`, key block dari `blocks.yml`, atau nama material Bukkit. Amount harus muat dalam satu stack. Skill `on-hit` memberi efek potion ke target serangan jarak dekat maupun proyektil; cooldown disimpan bersama data mob dan bertahan saat chunk/server dimuat ulang. Fitur berlaku untuk mob yang dibuat dengan `/ci spawn`; mob vanilla dengan tipe sama tidak ditandai sebagai custom. Semua field baru opsional, sehingga `mobs.yml` lama mempertahankan perilaku sebelumnya. Type, key, efek, peluang, cooldown, amount, dan nilai health/speed yang salah memberi warning di console; entri invalid dilewati.
 
 ### ranks.yml
 
