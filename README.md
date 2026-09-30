@@ -236,7 +236,11 @@ Untuk arsip ItemsAdder, gunakan perintah berikut:
 java tools/CustomItemsTools.java import-itemsadder --zip "D:\MC\elitecreatures-fairy_heart_zeref_animated_weapon_set.zip" --out "D:\Server\plugins\CustomItems"
 ```
 
-Tool membuat konfigurasi item terpisah di `imports/`, menyalin model/tekstur/equipment asset ke `pack-assets/assets/`, dan menyalin ikon generated-texture ke `textures/`. Pilih satu format importer untuk satu pack. Setelah selesai, jalankan `/ci reload`; item hasil impor dapat diberikan dengan `/ci give <key>`. Model state Oraxen yang umum diterjemahkan ke format item model Minecraft 26.2; ItemsAdder state dideteksi dari nama file model yang berakhiran standar. Mekanik furniture/hat masih belum diterjemahkan.
+Tool membuat konfigurasi item terpisah di `imports/`, menyalin model/tekstur/equipment asset ke `pack-assets/assets/`, dan menyalin ikon generated-texture ke `textures/`. Importer Oraxen memproses semua file `items/**/*.yml`, bukan hanya satu file; importer ItemsAdder memproses semua `contents/*/configs/*.yml`. Key item duplikat dilewati agar satu impor tidak menimpa item lain.
+
+Setiap impor menghasilkan laporan `imports/<nama-zip>-oraxen-import-report.txt` atau `imports/<nama-zip>-itemsadder-import-report.txt`. Laporan mencantumkan key yang berhasil dibuat, entri yang dilewati, asset yang disalin, serta mekanik yang dikenali tetapi belum diterjemahkan. Importer ItemsAdder membaca konfigurasi `resource` lama dan `graphics.model`/`graphics.texture` modern, termasuk model state yang didefinisikan untuk bow/crossbow/shield/fishing rod. Beberapa lapis texture state hanya mengambil texture normal; baca laporan untuk kasus tersebut. Importer juga mengenali pola armor tertentu. Ini belum merupakan migrasi penuh semua fitur Oraxen atau ItemsAdder: perilaku item, furniture/kendaraan, block, entity/mob, glyph/HUD, resep, komponen khusus, dan permission yang terdeteksi perlu dikonfigurasi atau dibuat ulang manual.
+
+Setelah selesai, baca laporan impor, jalankan `/ci reload`, lalu item hasil impor dapat diberikan dengan `/ci give <key>`.
 
 Saat memperbarui impor dari versi 0.8.4, backup folder data plugin lalu salin ulang ZIP setup yang sesuai dan izinkan file impor bernama sama diperbarui. Gabungkan folder `pack-assets/` dan `textures/`; jangan hapus `config.yml`, `block-states.yml`, atau `placed-blocks.txt`. Item armor lama akan menerima equipment model baru saat inventory pemain dimigrasikan.
 

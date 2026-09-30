@@ -234,69 +234,98 @@ public final class CustomItemsTools {
         Path output = requiredPath(options, "out");
         Files.createDirectories(output);
         try (ZipFile zip = new ZipFile(archive.toFile())) {
-            String configPath = zip.stream().map(ZipEntry::getName).map(name -> name.replace('\\', '/'))
-                    .filter(name -> name.matches("(?i)(?:.*/)?plugins/Oraxen/items/[^/]+\\.yml"))
-                    .sorted().findFirst().orElseThrow(() -> new IOException("Oraxen items/*.yml not found in " + archive));
-            ZipEntry config = zip.getEntry(configPath);
-            if (config == null) throw new IOException("Oraxen config entry not found: " + configPath);
-            String yaml;
-            try (InputStream in = zip.getInputStream(config)) {
-                yaml = new String(in.readAllBytes(), StandardCharsets.UTF_8);
-            }
-            List<ImportedItem> items = parseOraxenItems(yaml);
-            if (items.isEmpty()) throw new IOException("no importable Oraxen items found in " + configPath);
-            String pluginPrefix = configPath.substring(0, configPath.lastIndexOf("items/"));
-            String fileName = Path.of(configPath).getFileName().toString().replaceFirst("(?i)\\.yml$", "")
-                    .replaceAll("[^a-zA-Z0-9_-]", "_") + ".yml";
-            Path importedFile = output.resolve("imports").resolve(fileName);
-            if (Files.exists(importedFile)) throw new IOException("import already exists; remove it first to replace: " + importedFile);
-            int copied = copyOraxenAssets(zip, pluginPrefix + "pack/models/", output.resolve("pack-assets/assets/minecraft/models"), ".json");
-            copied += copyOraxenAssets(zip, pluginPrefix + "pack/textures/", output.resolve("pack-assets/assets/minecraft/textures"), ".png", ".mcmeta");
-            Map<String, String> armorModels = importOraxenArmorModels(zip, pluginPrefix, output.resolve("pack-assets/assets"));
+            List<? extends ZipEntry> configs = zip.stream()
+                    .filter(entry -> entry.getName().replace('\\', '/').matches("(?i)(?:.*/)?plugins/Oraxen/items/.+\\.yml"))
+                    .sorted(Comparator.comparing(entry -> entry.getName().replace('\\', '/'))).toList();
+            if (configs.isEmpty()) throw new IOException("Oraxen items/**/*.yml not found in " + archive);
 
-            Files.createDirectories(importedFile.getParent());
-            StringBuilder generated = new StringBuilder("items:\n");
-            int imported = 0;
-            for (ImportedItem item : items) {
-                String textureDestination = null;
-                if (item.model() != null) {
-                    String modelFile = pluginPrefix + "pack/models/" + item.model() + ".json";
-                    if (zip.getEntry(modelFile) == null) {
-                        System.err.println("Skipping " + item.key() + ": model missing from archive: " + modelFile);
-                        continue;
-                    }
-                } else if (item.texture() != null) {
-                    String texture = item.texture().replaceFirst("(?i)\\.png$", "");
-                    String textureEntry = pluginPrefix + "pack/textures/" + texture + ".png";
-                    ZipEntry textureFile = zip.getEntry(textureEntry);
-                    if (textureFile == null) {
-                        System.err.println("Skipping " + item.key() + ": texture missing from archive: " + textureEntry);
-                        continue;
-                    }
-                    textureDestination = "imported/oraxen/" + item.key() + ".png";
-                    copyZipEntry(zip, textureFile, output.resolve("textures").resolve(textureDestination));
-                } else continue;
-                generated.append("  ").append(item.key()).append(":\n")
-                        .append("    base: ").append(item.base()).append('\n')
-                        .append("    name: ").append(yamlString(item.name())).append('\n');
-                if (item.model() != null) {
-                    generated.append("    model: ").append(yamlString("minecraft:" + item.model())).append('\n');
-                    ImportedStates states = mergeStates(item.states(), inferModelStates(output.resolve("pack-assets/assets"),
-                            "minecraft", item.base(), item.model()));
-                    appendModelStates(generated, states, "minecraft");
-                } else {
-                    generated.append("    texture: ").append(yamlString(textureDestination)).append('\n');
+            ImportReport report = new ImportReport("Oraxen", archive);
+            Set<String> importedKeys = new HashSet<>();
+            for (ZipEntry entry : zip.stream().filter(e -> !e.isDirectory()).toList()) {
+                String name = entry.getName().replace('\\', '/');
+                if (!name.matches("(?i)(?:.*/)?plugins/Oraxen/.+\\.yml")) continue;
+                try (InputStream in = zip.getInputStream(entry)) {
+                    report.scan(name, new String(in.readAllBytes(), StandardCharsets.UTF_8));
                 }
-                String armorModel = armorModels.get(parentPath(item.texture()));
-                if (armorModel != null && isArmorMaterial(item.base())) {
-                    generated.append("    armor-model: ").append(yamlString(armorModel)).append('\n');
-                }
-                imported++;
             }
-            if (imported == 0) throw new IOException("no Oraxen items had model/texture assets in the archive");
-            Files.writeString(importedFile, generated, StandardCharsets.UTF_8);
-            System.out.printf("Imported %d Oraxen items and %d model/texture files to %s%n", imported, copied, output);
-            System.out.println("Run /ci reload in-game; imported item keys are available with /ci give <key>.");
+            for (ZipEntry config : configs) {
+                String configPath = config.getName().replace('\\', '/');
+                String yaml;
+                try (InputStream in = zip.getInputStream(config)) {
+                    yaml = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+                }
+                List<ImportedItem> items = parseOraxenItems(yaml);
+                if (items.isEmpty()) {
+                    report.skip(configPath + ": no supported item entries");
+                    continue;
+                }
+
+                String pluginPrefix = configPath.substring(0, configPath.lastIndexOf("items/"));
+                String relativeConfig = configPath.substring(pluginPrefix.length() + "items/".length());
+                String fileName = safeFileName(relativeConfig.replace('/', '_'));
+                Path importedFile = output.resolve("imports").resolve(fileName);
+                if (Files.exists(importedFile)) {
+                    throw new IOException("import already exists; remove it first to replace: " + importedFile);
+                }
+                Path assets = output.resolve("pack-assets/assets");
+                int copied = copyOraxenAssets(zip, pluginPrefix + "pack/models/",
+                        assets.resolve("minecraft/models"), ".json");
+                copied += copyOraxenAssets(zip, pluginPrefix + "pack/textures/",
+                        assets.resolve("minecraft/textures"), ".png", ".mcmeta");
+                Map<String, String> armorModels = importOraxenArmorModels(zip, pluginPrefix, assets, report);
+                report.assets += copied;
+
+                StringBuilder generated = new StringBuilder("items:\n");
+                for (ImportedItem item : items) {
+                    if (importedKeys.contains(item.key())) {
+                        report.skip(item.key() + ": duplicate key in " + configPath);
+                        continue;
+                    }
+                    String textureDestination = null;
+                    if (item.model() != null) {
+                        String modelFile = pluginPrefix + "pack/models/" + item.model() + ".json";
+                        if (zip.getEntry(modelFile) == null) {
+                            report.skip(item.key() + ": model missing from archive (" + modelFile + ")");
+                            continue;
+                        }
+                    } else if (item.texture() != null) {
+                        String texture = item.texture().replaceFirst("(?i)\\.png$", "");
+                        String textureEntry = pluginPrefix + "pack/textures/" + texture + ".png";
+                        ZipEntry textureFile = zip.getEntry(textureEntry);
+                        if (textureFile == null) {
+                            report.skip(item.key() + ": texture missing from archive (" + textureEntry + ")");
+                            continue;
+                        }
+                        textureDestination = "imported/oraxen/" + item.key() + ".png";
+                        copyZipEntry(zip, textureFile, output.resolve("textures").resolve(textureDestination));
+                    } else {
+                        report.skip(item.key() + ": item has no supported model or texture");
+                        continue;
+                    }
+                    importedKeys.add(item.key());
+                    generated.append("  ").append(item.key()).append(":\n")
+                            .append("    base: ").append(item.base()).append('\n')
+                            .append("    name: ").append(yamlString(item.name())).append('\n');
+                    if (item.model() != null) {
+                        generated.append("    model: ").append(yamlString("minecraft:" + item.model())).append('\n');
+                        ImportedStates states = mergeStates(item.states(), inferModelStates(assets,
+                                "minecraft", item.base(), item.model()));
+                        appendModelStates(generated, states, "minecraft");
+                    } else {
+                        generated.append("    texture: ").append(yamlString(textureDestination)).append('\n');
+                    }
+                    String armorModel = armorModels.get(parentPath(item.texture()));
+                    if (armorModel != null && isArmorMaterial(item.base())) {
+                        generated.append("    armor-model: ").append(yamlString(armorModel)).append('\n');
+                    }
+                    report.imported(item.key());
+                }
+                if (generated.length() > "items:\n".length()) {
+                    Files.createDirectories(importedFile.getParent());
+                    Files.writeString(importedFile, generated, StandardCharsets.UTF_8);
+                }
+            }
+            report.finish(output.resolve("imports"));
         }
     }
 
@@ -309,8 +338,8 @@ public final class CustomItemsTools {
                     .filter(entry -> entry.getName().replace('\\', '/').matches("(?i)(?:.*/)?contents/[^/]+/configs/.+\\.yml"))
                     .sorted(Comparator.comparing(ZipEntry::getName)).toList();
             if (configs.isEmpty()) throw new IOException("ItemsAdder contents/*/configs/*.yml not found in " + archive);
-            int imported = 0;
-            int assets = 0;
+            ImportReport report = new ImportReport("ItemsAdder", archive);
+            Set<String> importedKeys = new HashSet<>();
             for (ZipEntry config : configs) {
                 String configPath = config.getName().replace('\\', '/');
                 String lowerPath = configPath.toLowerCase(Locale.ROOT);
@@ -323,70 +352,70 @@ public final class CustomItemsTools {
                 try (InputStream in = zip.getInputStream(config)) {
                     text = new String(in.readAllBytes(), StandardCharsets.UTF_8);
                 }
+                report.scan(configPath, text);
                 ItemsAdderData data = parseItemsAdderItems(text, folderNamespace);
                 if (data.items().isEmpty()) continue;
                 if (!data.namespace().matches("[a-z0-9._-]+")) {
-                    System.err.println("Skipping invalid ItemsAdder namespace in " + configPath + ": " + data.namespace());
+                    report.skip("invalid ItemsAdder namespace in " + configPath + ": " + data.namespace());
                     continue;
                 }
-                String fileName = data.namespace() + "_" + Path.of(configPath).getFileName().toString()
-                        .replaceFirst("(?i)\\.yml$", "");
-                fileName = fileName.replaceAll("[^a-zA-Z0-9_-]", "_") + ".yml";
+                String relativeConfig = configPath.substring(configsIndex + "configs/".length());
+                String fileName = safeFileName(data.namespace() + "_" + relativeConfig.replace('/', '_'));
                 Path importedFile = output.resolve("imports").resolve(fileName);
                 if (Files.exists(importedFile)) throw new IOException("import already exists; remove it first to replace: " + importedFile);
-                assets += copyItemsAdderAssets(zip, contentRoot, data.namespace(), output.resolve("pack-assets/assets"));
+                report.assets += copyItemsAdderAssets(zip, contentRoot, data.namespace(), output.resolve("pack-assets/assets"));
                 Set<String> armorModels = writeItemsAdderArmorModels(zip, contentRoot, data,
-                        output.resolve("pack-assets/assets"));
+                        output.resolve("pack-assets/assets"), report);
 
                 StringBuilder generated = new StringBuilder("items:\n");
-                int fileItems = 0;
                 for (ItemsAdderItem item : data.items()) {
-                    String modelFile = output.resolve("pack-assets/assets").resolve(data.namespace())
-                            .resolve("models").resolve(item.model() + ".json").normalize().toString();
+                    if (importedKeys.contains(item.key())) {
+                        report.skip(item.key() + ": duplicate key across ItemsAdder namespaces/configs");
+                        continue;
+                    }
+                    Path modelFile = importedModelPath(output.resolve("pack-assets/assets"), item.model());
                     String texturePath = item.texture() == null ? null : withPngExtension(item.texture());
                     String textureFile = texturePath == null ? null : output.resolve("pack-assets/assets")
                             .resolve(data.namespace()).resolve("textures").resolve(texturePath).normalize().toString();
-                    if (item.model() != null && !Files.isRegularFile(Path.of(modelFile))) {
-                        System.err.println("Skipping " + item.key() + ": ItemsAdder model not found: " + modelFile);
+                    if (item.model() != null && !modelAvailable(output.resolve("pack-assets/assets"), item.model())) {
+                        report.skip(item.key() + ": ItemsAdder model not found (" + modelFile + ")");
                         continue;
                     }
                     if (item.model() == null && (textureFile == null || !Files.isRegularFile(Path.of(textureFile)))) {
-                        System.err.println("Skipping " + item.key() + ": ItemsAdder texture not found: " + textureFile);
+                        report.skip(item.key() + ": ItemsAdder texture not found (" + textureFile + ")");
                         continue;
                     }
                     generated.append("  ").append(item.key()).append(":\n")
                             .append("    base: ").append(item.base()).append('\n')
                             .append("    name: ").append(yamlString(item.name())).append('\n');
                     if (item.model() != null) {
-                        generated.append("    model: ").append(yamlString(data.namespace() + ":" + item.model())).append('\n');
-                        appendModelStates(generated, inferModelStates(output.resolve("pack-assets/assets"),
-                                data.namespace(), item.base(), item.model()), data.namespace());
+                        generated.append("    model: ").append(yamlString(item.model())).append('\n');
+                        Path assets = output.resolve("pack-assets/assets");
+                        ImportedStates states = validateModelStates(item.key(), assets, report, mergeStates(
+                                item.states(), inferModelStates(assets, data.namespace(), item.base(), item.model())));
+                        appendModelStates(generated, states, data.namespace());
                     } else {
                         String destination = "imported/itemsadder/" + data.namespace() + "/" + item.key() + ".png";
                         copyZipEntry(zip, findItemsAdderTexture(zip, contentRoot, data.namespace(), texturePath),
                                 output.resolve("textures").resolve(destination));
                         generated.append("    texture: ").append(yamlString(destination)).append('\n');
-                        if (item.textureCount() > 1) {
-                            System.err.println("Note: " + item.key() + " has multiple generated textures; imported the first layer only");
-                        }
                     }
+                    if (item.textureCount() > 1) report.note(item.key()
+                            + ": multiple texture layers/states found; only the normal/base texture is imported");
                     if (item.armorModel() != null && armorModels.contains(item.armorModel())) {
                         generated.append("    armor-model: ")
                                 .append(yamlString(data.namespace() + ":" + item.armorModel())).append('\n');
                     } else if (item.armorModel() != null) {
-                        System.err.println("Skipping armor model for " + item.key() + ": ItemsAdder armor set not found: "
-                                + item.armorModel());
+                        report.note(item.key() + ": ItemsAdder armor set not found (" + item.armorModel() + ")");
                     }
-                    fileItems++;
+                    importedKeys.add(item.key());
+                    report.imported(item.key());
                 }
-                if (fileItems == 0) continue;
+                if (generated.length() == "items:\n".length()) continue;
                 Files.createDirectories(importedFile.getParent());
                 Files.writeString(importedFile, generated, StandardCharsets.UTF_8);
-                imported += fileItems;
             }
-            if (imported == 0) throw new IOException("no static ItemsAdder items with supported models/textures were found");
-            System.out.printf("Imported %d ItemsAdder items and %d model/texture files to %s%n", imported, assets, output);
-            System.out.println("Run /ci reload in-game; imported item keys are available with /ci give <key>.");
+            report.finish(output.resolve("imports"));
         }
     }
 
@@ -395,9 +424,13 @@ public final class CustomItemsTools {
         List<ItemsAdderItem> items = new ArrayList<>();
         List<ArmorRendering> armors = new ArrayList<>();
         String armorKey = null, layer1 = null, layer2 = null;
-        String key = null, base = null, name = null, model = null, texture = null, armorSlot = null, armorModel = null;
+        String key = null, base = null, name = null, legacyModel = null, legacyTexture = null;
+        String graphicsModel = null, graphicsTexture = null, armorSlot = null, armorModel = null;
+        Map<String, String> graphicsModels = new LinkedHashMap<>();
+        Map<String, String> graphicsTextures = new LinkedHashMap<>();
         int textureCount = 0;
-        boolean inItems = false, inArmors = false, inResource = false, inArmorProperties = false, readingTextures = false;
+        boolean inItems = false, inArmors = false, inResource = false, inGraphics = false;
+        boolean inGraphicsModels = false, inGraphicsTextures = false, inArmorProperties = false, readingTextures = false;
         for (String line : yaml.split("\\R")) {
             if (!inItems) {
                 Matcher namespaceField = Pattern.compile("^ {2}namespace:\\s*(.*?)\\s*$").matcher(line);
@@ -428,38 +461,79 @@ public final class CustomItemsTools {
             }
             Matcher itemStart = Pattern.compile("^ {2}([a-zA-Z0-9_-]+):\\s*$").matcher(line);
             if (itemStart.matches()) {
-                addItemsAdderItem(items, key, base, name, model, texture, armorSlot, armorModel, textureCount);
+                addItemsAdderItem(items, namespace, key, base, name, legacyModel, legacyTexture,
+                        graphicsModel, graphicsTexture, graphicsModels, graphicsTextures,
+                        armorSlot, armorModel, textureCount);
                 key = itemStart.group(1).toLowerCase(Locale.ROOT);
-                base = name = model = texture = armorSlot = armorModel = null;
+                base = name = legacyModel = legacyTexture = graphicsModel = graphicsTexture = armorSlot = armorModel = null;
+                graphicsModels = new LinkedHashMap<>();
+                graphicsTextures = new LinkedHashMap<>();
                 textureCount = 0;
-                inResource = inArmorProperties = readingTextures = false;
+                inResource = inGraphics = inGraphicsModels = inGraphicsTextures = inArmorProperties = readingTextures = false;
                 continue;
             }
             if (line.matches("^[^\\s#][^:]*:\\s*$")) {
-                addItemsAdderItem(items, key, base, name, model, texture, armorSlot, armorModel, textureCount);
+                addItemsAdderItem(items, namespace, key, base, name, legacyModel, legacyTexture,
+                        graphicsModel, graphicsTexture, graphicsModels, graphicsTextures,
+                        armorSlot, armorModel, textureCount);
                 inItems = false;
                 break;
             }
             Matcher section = Pattern.compile("^ {4}([a-zA-Z_]+):\\s*$").matcher(line);
             if (section.matches()) {
                 inResource = section.group(1).equals("resource");
+                inGraphics = section.group(1).equals("graphics");
                 inArmorProperties = section.group(1).equals("specific_properties");
-                readingTextures = false;
+                inGraphicsModels = inGraphicsTextures = readingTextures = false;
                 continue;
             }
-            Matcher display = Pattern.compile("^ {4}display_name:\\s*(.*?)\\s*$").matcher(line);
-            if (display.matches()) { name = unquote(display.group(1)); continue; }
+            Matcher property = Pattern.compile("^ {4}(display_name|name|material):\\s*(.*?)\\s*$").matcher(line);
+            if (property.matches()) {
+                switch (property.group(1)) {
+                    case "display_name", "name" -> name = unquote(property.group(2));
+                    case "material" -> base = unquote(property.group(2)).toUpperCase(Locale.ROOT);
+                }
+                continue;
+            }
+            if (inGraphics && line.matches("^ {6}models:\\s*$")) {
+                inGraphicsModels = true;
+                inGraphicsTextures = false;
+                continue;
+            }
+            if (inGraphics && line.matches("^ {6}textures:\\s*$")) {
+                inGraphicsTextures = true;
+                inGraphicsModels = false;
+                continue;
+            }
+            Matcher graphicsProperty = Pattern.compile("^ {6}(model|texture|icon|parent):\\s*(.*?)\\s*$").matcher(line);
+            if (inGraphics && graphicsProperty.matches()) {
+                String value = unquote(graphicsProperty.group(2));
+                if (graphicsProperty.group(1).equals("model")) graphicsModel = value;
+                if (graphicsProperty.group(1).equals("texture")) graphicsTexture = value;
+                inGraphicsModels = inGraphicsTextures = false;
+                continue;
+            }
+            Matcher graphicsEntry = Pattern.compile("^ {8}([a-zA-Z0-9_-]+):\\s*(.*?)\\s*$").matcher(line);
+            if (inGraphicsModels && graphicsEntry.matches()) {
+                graphicsModels.put(graphicsEntry.group(1).toLowerCase(Locale.ROOT), unquote(graphicsEntry.group(2)));
+                continue;
+            }
+            if (inGraphicsTextures && graphicsEntry.matches()) {
+                graphicsTextures.put(graphicsEntry.group(1).toLowerCase(Locale.ROOT), unquote(graphicsEntry.group(2)));
+                textureCount++;
+                continue;
+            }
             Matcher material = Pattern.compile("^ {6}material:\\s*(.*?)\\s*$").matcher(line);
             if (inResource && material.matches()) { base = unquote(material.group(1)).toUpperCase(Locale.ROOT); continue; }
             Matcher modelField = Pattern.compile("^ {6}model_path:\\s*(.*?)\\s*$").matcher(line);
-            if (inResource && modelField.matches()) { model = cleanItemsAdderPath(unquote(modelField.group(1))); continue; }
+            if (inResource && modelField.matches()) { legacyModel = unquote(modelField.group(1)); continue; }
             if (inResource && line.matches("^ {6}textures:\\s*$")) { readingTextures = true; continue; }
             Matcher textureField = Pattern.compile("^ {6,8}-\\s*(.*?)\\s*$").matcher(line);
             if (inResource && readingTextures && textureField.matches()) {
                 String value = cleanItemsAdderPath(unquote(textureField.group(1)));
                 if (value != null) {
                     textureCount++;
-                    if (texture == null) texture = value;
+                    if (legacyTexture == null) legacyTexture = value;
                 }
                 continue;
             }
@@ -468,30 +542,78 @@ public final class CustomItemsTools {
             Matcher customArmor = Pattern.compile("^ {8}custom_armor:\\s*(.*?)\\s*$").matcher(line);
             if (inArmorProperties && customArmor.matches()) armorModel = unquote(customArmor.group(1));
         }
-        if (inItems) addItemsAdderItem(items, key, base, name, model, texture, armorSlot, armorModel, textureCount);
+        if (inItems) addItemsAdderItem(items, namespace, key, base, name, legacyModel, legacyTexture,
+                graphicsModel, graphicsTexture, graphicsModels, graphicsTextures,
+                armorSlot, armorModel, textureCount);
         else addArmorRendering(armors, armorKey, layer1, layer2);
         return new ItemsAdderData(namespace, List.copyOf(items), List.copyOf(armors));
     }
 
-    private static void addItemsAdderItem(List<ItemsAdderItem> items, String key, String base, String name,
-                                          String model, String texture, String armorSlot, String armorModel, int textureCount) {
+    private static void addItemsAdderItem(List<ItemsAdderItem> items, String namespace, String key, String base,
+                                          String name, String legacyModel, String legacyTexture,
+                                          String graphicsModel, String graphicsTexture,
+                                          Map<String, String> graphicsModels, Map<String, String> graphicsTextures,
+                                          String armorSlot, String armorModel, int textureCount) {
         if (key == null) return;
         if (base == null) base = switch (armorSlot == null ? "" : armorSlot) {
             case "head" -> "LEATHER_HELMET";
             case "chest" -> "LEATHER_CHESTPLATE";
             case "legs" -> "LEATHER_LEGGINGS";
             case "feet" -> "LEATHER_BOOTS";
-            default -> "";
+            default -> "PAPER";
         };
         if (!base.matches("[A-Z0-9_]+")) return;
-        if (model != null && !safeResourcePath(model)) model = null;
+        String model = graphicsModels.getOrDefault("normal", graphicsModel == null ? legacyModel : graphicsModel);
+        String texture = graphicsTextures.getOrDefault("normal", graphicsTexture == null ? legacyTexture : graphicsTexture);
+        model = model == null ? null : qualifyItemsAdderModel(namespace, model);
+        if (model != null && !safeModelId(model)) model = null;
         if (armorModel != null && !safeResourcePath(armorModel)) armorModel = null;
         if (texture != null) {
             texture = cleanItemsAdderPath(texture);
             if (texture != null && !safeResourcePath(texture)) texture = null;
         }
-        if (model != null || texture != null) items.add(new ItemsAdderItem(key, base,
-                name == null || name.isBlank() ? key : name, model, texture, armorSlot, armorModel, textureCount));
+        if (model != null || texture != null) {
+            List<String> pulling = new ArrayList<>();
+            for (String state : List.of("pulling_0", "pulling_1", "pulling_2")) {
+                String value = graphicsModels.get(state);
+                if (value != null) {
+                    String qualified = qualifyOptionalModel(namespace, value);
+                    if (qualified != null) pulling.add(qualified);
+                }
+            }
+            String charged = modelValue(namespace, graphicsModels.get("charged"), graphicsModels.get("arrow"));
+            String firework = modelValue(namespace, graphicsModels.get("firework"), graphicsModels.get("rocket"));
+            String cast = qualifyOptionalModel(namespace, graphicsModels.get("cast"));
+            String blocking = qualifyOptionalModel(namespace, graphicsModels.get("blocking"));
+            ImportedStates states = new ImportedStates(pulling.size() == 3 ? pulling : List.of(),
+                    charged, firework, cast, blocking);
+            items.add(new ItemsAdderItem(key, base, name == null || name.isBlank() ? key : name,
+                    model, texture, armorSlot, armorModel, textureCount, states));
+        }
+    }
+
+    private static String modelValue(String namespace, String preferred, String fallback) {
+        return qualifyOptionalModel(namespace, preferred == null ? fallback : preferred);
+    }
+
+    private static String qualifyOptionalModel(String namespace, String model) {
+        if (model == null) return null;
+        String qualified = qualifyItemsAdderModel(namespace, model);
+        return safeModelId(qualified) ? qualified : null;
+    }
+
+    private static String qualifyItemsAdderModel(String namespace, String model) {
+        int colon = model.indexOf(':');
+        String modelNamespace = colon < 0 ? namespace : model.substring(0, colon).toLowerCase(Locale.ROOT);
+        String path = cleanItemsAdderPath(model);
+        return path == null ? null : modelNamespace + ":" + path;
+    }
+
+    private static boolean safeModelId(String model) {
+        int colon = model.indexOf(':');
+        return colon > 0 && model.indexOf(':', colon + 1) < 0
+                && model.substring(0, colon).matches("[a-z0-9._-]+")
+                && safeResourcePath(model.substring(colon + 1));
     }
 
     private static void addArmorRendering(List<ArmorRendering> armors, String key, String layer1, String layer2) {
@@ -550,13 +672,13 @@ public final class CustomItemsTools {
     }
 
     private static Set<String> writeItemsAdderArmorModels(ZipFile zip, String contentRoot, ItemsAdderData data,
-                                                          Path assets) throws IOException {
+                                                          Path assets, ImportReport report) throws IOException {
         Set<String> written = new HashSet<>();
         for (ArmorRendering armor : data.armors()) {
             ZipEntry layer1 = findItemsAdderTexture(zip, contentRoot, data.namespace(), withPngExtension(armor.layer1()));
             ZipEntry layer2 = findItemsAdderTexture(zip, contentRoot, data.namespace(), withPngExtension(armor.layer2()));
             if (layer1 == null || layer2 == null) {
-                System.err.println("Skipping ItemsAdder armor set " + armor.key() + ": missing layer texture");
+                report.note("ItemsAdder armor set " + armor.key() + " was not imported: missing layer texture");
                 continue;
             }
             copyZipEntry(zip, layer1, assets.resolve(data.namespace()).resolve("textures/entity/equipment/humanoid")
@@ -576,7 +698,8 @@ public final class CustomItemsTools {
         return written;
     }
 
-    private static Map<String, String> importOraxenArmorModels(ZipFile zip, String pluginPrefix, Path assets)
+    private static Map<String, String> importOraxenArmorModels(ZipFile zip, String pluginPrefix, Path assets,
+                                                               ImportReport report)
             throws IOException {
         String texturePrefix = pluginPrefix + "pack/textures/";
         Map<String, List<String>> modelByDirectory = new HashMap<>();
@@ -608,15 +731,15 @@ public final class CustomItemsTools {
         Map<String, String> unambiguous = new HashMap<>();
         modelByDirectory.forEach((directory, models) -> {
             if (models.size() == 1) unambiguous.put(directory, models.getFirst());
-            else System.err.println("Note: multiple Oraxen armor layer pairs in " + directory
-                    + "; set armor-model manually for those items");
+            else report.note("multiple Oraxen armor layer pairs in " + directory
+                    + "; set armor-model manually for items using this directory");
         });
         return unambiguous;
     }
 
     private static ImportedStates inferModelStates(Path assets, String namespace, String base, String model) {
         if (model == null) return ImportedStates.EMPTY;
-        String root = namespace + ":" + model;
+        String root = model.indexOf(':') >= 0 ? model : namespace + ":" + model;
         List<String> pulling = List.of();
         if (base.equals("BOW") || base.equals("CROSSBOW")) {
             List<String> candidates = List.of(root + "_0", root + "_1", root + "_2");
@@ -627,6 +750,13 @@ public final class CustomItemsTools {
         String cast = base.equals("FISHING_ROD") && modelFileExists(assets, root + "_cast") ? root + "_cast" : null;
         String blocking = base.equals("SHIELD") && modelFileExists(assets, root + "_blocking") ? root + "_blocking" : null;
         return new ImportedStates(pulling, charged, firework, cast, blocking);
+    }
+
+    private static Path importedModelPath(Path assets, String model) {
+        int colon = model.indexOf(':');
+        String namespace = colon < 0 ? "minecraft" : model.substring(0, colon);
+        String path = colon < 0 ? model : model.substring(colon + 1);
+        return assets.resolve(namespace).resolve("models").resolve(path + ".json").normalize();
     }
 
     private static ImportedStates mergeStates(ImportedStates preferred, ImportedStates fallback) {
@@ -643,6 +773,32 @@ public final class CustomItemsTools {
         Path path = assets.resolve(id.substring(0, colon)).resolve("models")
                 .resolve(id.substring(colon + 1) + ".json").normalize();
         return path.startsWith(assets.normalize()) && Files.isRegularFile(path);
+    }
+
+    private static boolean modelAvailable(Path assets, String id) {
+        return id.startsWith("minecraft:item/") || id.startsWith("minecraft:block/") || modelFileExists(assets, id);
+    }
+
+    private static ImportedStates validateModelStates(String key, Path assets, ImportReport report,
+                                                       ImportedStates states) {
+        List<String> pulling = states.pulling();
+        if (!pulling.isEmpty() && pulling.stream().anyMatch(model -> !modelAvailable(assets, model))) {
+            report.note(key + ": bow/crossbow state models are incomplete; pulling states were omitted");
+            pulling = List.of();
+        }
+        return new ImportedStates(pulling,
+                availableState(key, "charged", states.charged(), assets, report),
+                availableState(key, "firework", states.firework(), assets, report),
+                availableState(key, "cast", states.cast(), assets, report),
+                availableState(key, "blocking", states.blocking(), assets, report));
+    }
+
+    private static String availableState(String key, String state, String model, Path assets, ImportReport report) {
+        if (model != null && !modelAvailable(assets, model)) {
+            report.note(key + ": " + state + " state model not found and was omitted (" + model + ")");
+            return null;
+        }
+        return model;
     }
 
     private static void appendModelStates(StringBuilder yaml, ImportedStates states, String defaultNamespace) {
@@ -781,6 +937,14 @@ public final class CustomItemsTools {
                 && !value.contains("//");
     }
 
+    private static String safeFileName(String value) {
+        return value.replaceFirst("(?i)\\.yml$", "").replaceAll("[^a-zA-Z0-9_-]", "_") + ".yml";
+    }
+
+    private static String safeFileStem(String value) {
+        return value.replaceAll("[^a-zA-Z0-9_-]", "_");
+    }
+
     private static String unquote(String value) {
         String text = value.trim();
         if (text.length() >= 2 && ((text.startsWith("\"") && text.endsWith("\""))
@@ -818,9 +982,109 @@ public final class CustomItemsTools {
 
     private record ImportedItem(String key, String base, String name, String model, String texture, ImportedStates states) {}
     private record ItemsAdderItem(String key, String base, String name, String model, String texture,
-                                  String armorSlot, String armorModel, int textureCount) {}
+                                  String armorSlot, String armorModel, int textureCount, ImportedStates states) {}
     private record ItemsAdderData(String namespace, List<ItemsAdderItem> items, List<ArmorRendering> armors) {}
     private record ArmorRendering(String key, String layer1, String layer2) {}
+
+    private static final class ImportReport {
+        private static final Map<String, String> UNTRANSLATED_KEYS = Map.ofEntries(
+                Map.entry("mechanics", "Oraxen mechanics"),
+                Map.entry("components", "Item components and attributes"),
+                Map.entry("behaviours", "ItemsAdder behaviors"),
+                Map.entry("events", "Gameplay event actions"),
+                Map.entry("lore", "Item lore"),
+                Map.entry("permission", "Per-item permissions"),
+                Map.entry("blocks", "Custom block definitions"),
+                Map.entry("entities", "Custom entity definitions"),
+                Map.entry("huds", "HUD definitions"),
+                Map.entry("font_images", "Font images and glyphs"),
+                Map.entry("recipes", "Custom recipes"),
+                Map.entry("furniture", "Furniture mechanics"),
+                Map.entry("vehicle", "Vehicle mechanics"),
+                Map.entry("vehicles", "Vehicle mechanics"),
+                Map.entry("icon", "Separate inventory icon graphics"),
+                Map.entry("parent", "Custom model parent settings"),
+                Map.entry("oversized_in_gui", "Oversized GUI item rendering"),
+                Map.entry("hand_animation_on_swap", "Hand animation settings"),
+                Map.entry("item_model", "Manually assigned item model identifiers"),
+                Map.entry("model_id", "Legacy custom model data identifiers"),
+                Map.entry("variant_of", "Template and variant inheritance"),
+                Map.entry("template", "Template and variant inheritance"),
+                Map.entry("item_flags", "Item tooltip flags"),
+                Map.entry("durability", "Custom item durability")
+        );
+
+        private final String format;
+        private final Path archive;
+        private final List<String> imported = new ArrayList<>();
+        private final List<String> skipped = new ArrayList<>();
+        private final List<String> notes = new ArrayList<>();
+        private final Map<String, Set<String>> untranslated = new LinkedHashMap<>();
+        private int assets;
+
+        private ImportReport(String format, Path archive) {
+            this.format = format;
+            this.archive = archive;
+        }
+
+        private void imported(String key) { imported.add(key); }
+        private void skip(String reason) { skipped.add(reason); }
+        private void note(String message) { notes.add(message); }
+
+        private void scan(String source, String yaml) {
+            String lowerSource = source.toLowerCase(Locale.ROOT);
+            if (lowerSource.contains("/glyphs/") || lowerSource.endsWith("/glyphs.yml"))
+                detect("Font images and glyphs", source);
+            if (lowerSource.contains("/huds/") || lowerSource.endsWith("/huds.yml"))
+                detect("HUD definitions", source);
+            for (String line : yaml.split("\\R")) {
+                String trimmed = line.trim();
+                if (trimmed.isEmpty() || trimmed.startsWith("#")) continue;
+                int colon = trimmed.indexOf(':');
+                if (colon < 1) continue;
+                String key = trimmed.substring(0, colon).trim().toLowerCase(Locale.ROOT);
+                String feature = UNTRANSLATED_KEYS.get(key);
+                if (feature != null) detect(feature, source);
+            }
+        }
+
+        private void detect(String feature, String source) {
+            untranslated.computeIfAbsent(feature, ignored -> new LinkedHashSet<>()).add(source);
+        }
+
+        private void finish(Path reportDirectory) throws IOException {
+            Files.createDirectories(reportDirectory);
+            String stem = archive.getFileName().toString().replaceFirst("(?i)\\.zip$", "");
+            Path report = reportDirectory.resolve(safeFileStem(stem) + "-" + format.toLowerCase(Locale.ROOT) + "-import-report.txt");
+            StringBuilder text = new StringBuilder()
+                    .append(format).append(" import report\n")
+                    .append("Archive: ").append(archive).append('\n')
+                    .append("Imported items: ").append(imported.size()).append('\n')
+                    .append("Copied model/texture/equipment assets: ").append(assets).append(" files\n\n")
+                    .append("Translated fields: item key, base material, display name, supported model/texture,")
+                    .append(" recognized bow/crossbow/shield/fishing-rod model states, and recognized armor assets.\n")
+                    .append("This importer is partial: unsupported source configuration is not applied automatically.\n\n")
+                    .append("Detected but not translated:\n");
+            if (untranslated.isEmpty()) text.append("- No known unsupported keys detected in scanned item configuration files.\n");
+            untranslated.forEach((feature, sources) -> text.append("- ").append(feature).append(" (in ")
+                    .append(String.join(", ", sources)).append(")\n"));
+            text.append("\nSkipped entries:\n");
+            if (skipped.isEmpty()) text.append("- None\n");
+            else skipped.forEach(reason -> text.append("- ").append(reason).append('\n'));
+            text.append("\nPartial conversions and notes:\n");
+            if (notes.isEmpty()) text.append("- None\n");
+            else notes.forEach(message -> text.append("- ").append(message).append('\n'));
+            text.append("\nImported keys:\n");
+            if (imported.isEmpty()) text.append("- None\n");
+            else imported.forEach(key -> text.append("- ").append(key).append('\n'));
+            Files.writeString(report, text, StandardCharsets.UTF_8);
+            System.out.printf("Imported %d items and %d model/texture/equipment files to %s%n", imported.size(), assets,
+                    report.getParent().getParent());
+            System.out.println("Import report: " + report);
+            if (imported.isEmpty()) throw new IOException("no supported static items were imported; see " + report);
+            System.out.println("Run /ci reload in-game; imported item keys are available with /ci give <key>.");
+        }
+    }
 
     private record ImportedStates(List<String> pulling, String charged, String firework, String cast, String blocking) {
         private static final ImportedStates EMPTY = new ImportedStates(List.of(), null, null, null, null);
