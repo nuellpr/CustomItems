@@ -11,6 +11,8 @@ public record ItemDef(
         Material base,
         String texture,
         String model,
+        ModelStates modelStates,
+        String armorModel,
         Component name,
         List<Component> lore,
         Double damageBonus,
@@ -22,11 +24,24 @@ public record ItemDef(
         List<Ability> onRightClick
 ) {
     public ItemDef {
+        modelStates = modelStates == null ? ModelStates.EMPTY : modelStates;
         lore = List.copyOf(lore);
         heldEffects = List.copyOf(heldEffects);
         useEffects = List.copyOf(useEffects);
         onHit = List.copyOf(onHit);
         onRightClick = List.copyOf(onRightClick);
+    }
+
+    public record ModelStates(List<String> pulling, String charged, String firework, String cast, String blocking) {
+        private static final ModelStates EMPTY = new ModelStates(List.of(), null, null, null, null);
+
+        public ModelStates {
+            pulling = List.copyOf(pulling);
+        }
+
+        public boolean isEmpty() {
+            return pulling.isEmpty() && charged == null && firework == null && cast == null && blocking == null;
+        }
     }
 
     public record PotionEffectDef(PotionEffectType type, int amplifier, int duration) {}

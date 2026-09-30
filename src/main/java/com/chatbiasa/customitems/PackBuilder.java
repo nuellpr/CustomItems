@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.stream.Stream;
@@ -49,8 +50,7 @@ public final class PackBuilder {
                         ? "minecraft:item/handheld" : "minecraft:item/generated";
                 if (def.model() == null) {
                     put(zip, "assets/" + namespace + "/items/" + def.key() + ".json",
-                            "{\"model\":{\"type\":\"minecraft:model\",\"model\":\"" + namespace
-                                    + ":item/" + def.key() + "\"}}");
+                            itemDefinition(def, namespace + ":item/" + def.key()));
                     put(zip, "assets/" + namespace + "/models/item/" + def.key() + ".json",
                             "{\"parent\":\"" + parent + "\",\"textures\":{\"layer0\":\"" + namespace
                                     + ":item/" + def.key() + "\"}}");
@@ -58,11 +58,20 @@ public final class PackBuilder {
                             "Missing or unsafe texture for '" + def.key() + "': " + def.texture());
                 } else {
                     put(zip, "assets/" + namespace + "/items/" + def.key() + ".json",
-                            "{\"model\":{\"type\":\"minecraft:model\",\"model\":\"" + def.model() + "\"}}");
+                            itemDefinition(def, def.model()));
                     if (!importedModelExists(def.model())) {
                         plugin.getLogger().warning("Missing imported model for '" + def.key() + "': " + def.model()
                                 + " (copy its JSON under pack-assets/assets/<namespace>/models/)");
                     }
+                }
+                for (String stateModel : stateModels(def.modelStates())) {
+                    if (!stateModel.startsWith("minecraft:item/") && !importedModelExists(stateModel)) {
+                        plugin.getLogger().warning("Missing model state for '" + def.key() + "': " + stateModel);
+                    }
+                }
+                if (def.armorModel() != null && !importedEquipmentExists(def.armorModel())) {
+                    plugin.getLogger().warning("Missing equipment model for '" + def.key() + "': " + def.armorModel()
+                            + " (copy its JSON under pack-assets/assets/<namespace>/equipment/)");
                 }
             }
             // Custom blocks are note blocks whose instrument+note blockstate selects our own model --
@@ -200,7 +209,7 @@ public final class PackBuilder {
                     plugin.getLogger().warning("Ignoring invalid resource-pack namespace: " + namespace);
                     continue;
                 }
-                for (String kind : List.of("models", "textures")) {
+                for (String kind : List.of("models", "textures", "equipment")) {
                     Path kindDir = namespaceDir.resolve(kind);
                     if (!Files.isDirectory(kindDir)) continue;
                     try (Stream<Path> files = Files.walk(kindDir)) {
@@ -213,9 +222,8 @@ public final class PackBuilder {
                             }
                             String relative = kindDir.relativize(file).toString().replace('\\', '/');
                             String firstPart = relative.contains("/") ? relative.substring(0, relative.indexOf('/')) : relative;
-                            boolean vanillaNamespace = namespace.equals("minecraft");
                             boolean pluginNamespace = namespace.equals(plugin.getName().toLowerCase(Locale.ROOT));
-                            if ((vanillaNamespace || pluginNamespace)
+                            if (pluginNamespace
                                     && ((kind.equals("models") && List.of("item", "block").contains(firstPart))
                                     || (kind.equals("textures") && List.of("item", "block", "font").contains(firstPart)))) {
                                 plugin.getLogger().warning("Ignoring imported asset in reserved path: " + relative);
@@ -245,6 +253,75 @@ public final class PackBuilder {
         } catch (IOException e) {
             return false;
         }
+    }
+
+    private boolean importedEquipmentExists(String model) {
+        NamespacedKey key = NamespacedKey.fromString(model);
+        if (key == null) return false;
+        Path root = new File(plugin.getDataFolder(), "pack-assets/assets").toPath().toAbsolutePath().normalize();
+        Path file = root.resolve(key.getNamespace()).resolve("equipment").resolve(key.getKey() + ".json").normalize();
+        if (!file.startsWith(root)) return false;
+        try {
+            return Files.isRegularFile(file.toRealPath()) && file.toRealPath().startsWith(root.toRealPath());
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    private static String itemDefinition(ItemDef def, String defaultModel) {
+        ItemDef.ModelStates states = def.modelStates();
+        if (states.isEmpty()) return model(defaultModel);
+        return switch (def.base()) {
+            case BOW -> states.pulling().size() == 3 ? bowDefinition(defaultModel, states.pulling()) : model(defaultModel);
+            case CROSSBOW -> crossbowDefinition(defaultModel, states);
+            case FISHING_ROD -> states.cast() == null ? model(defaultModel)
+                    : condition("minecraft:fishing_rod/cast", model(defaultModel), model(states.cast()));
+            case SHIELD -> states.blocking() == null ? model(defaultModel)
+                    : condition("minecraft:using_item", model(defaultModel), model(states.blocking()));
+            default -> model(defaultModel);
+        };
+    }
+
+    private static String bowDefinition(String base, List<String> pulling) {
+        return "{\"model\":{\"type\":\"minecraft:condition\",\"property\":\"minecraft:using_item\","
+                + "\"on_false\":" + model(base) + ",\"on_true\":{\"type\":\"minecraft:range_dispatch\","
+                + "\"property\":\"minecraft:use_duration\",\"scale\":0.05,\"fallback\":" + model(pulling.get(0))
+                + ",\"entries\":[{\"threshold\":0.65,\"model\":" + model(pulling.get(1))
+                + "},{\"threshold\":0.9,\"model\":" + model(pulling.get(2)) + "}]}}}";
+    }
+
+    private static String crossbowDefinition(String base, ItemDef.ModelStates states) {
+        String uncharged = model(base);
+        if (states.pulling().size() == 3) {
+            List<String> pulling = states.pulling();
+            uncharged = "{\"type\":\"minecraft:condition\",\"property\":\"minecraft:using_item\","
+                    + "\"on_false\":" + model(base) + ",\"on_true\":{\"type\":\"minecraft:range_dispatch\","
+                    + "\"property\":\"minecraft:crossbow/pull\",\"fallback\":" + model(pulling.get(0))
+                    + ",\"entries\":[{\"threshold\":0.58,\"model\":" + model(pulling.get(1))
+                    + "},{\"threshold\":1.0,\"model\":" + model(pulling.get(2)) + "]}}";
+        }
+        return "{\"model\":{\"type\":\"minecraft:select\",\"property\":\"minecraft:charge_type\","
+                + "\"cases\":[{\"when\":\"arrow\",\"model\":" + model(states.charged() == null ? base : states.charged())
+                + "},{\"when\":\"rocket\",\"model\":" + model(states.firework() == null ? base : states.firework())
+                + "}],\"fallback\":" + uncharged + "}}";
+    }
+
+    private static String condition(String property, String whenFalse, String whenTrue) {
+        return "{\"model\":{\"type\":\"minecraft:condition\",\"property\":\"" + property
+                + "\",\"on_false\":" + whenFalse + ",\"on_true\":" + whenTrue + "}}";
+    }
+
+    private static String model(String id) {
+        return "{\"type\":\"minecraft:model\",\"model\":\"" + id + "\"}";
+    }
+
+    private static List<String> stateModels(ItemDef.ModelStates states) {
+        List<String> models = new ArrayList<>(states.pulling());
+        if (states.charged() != null) models.add(states.charged());
+        if (states.firework() != null) models.add(states.firework());
+        if (states.cast() != null) models.add(states.cast());
+        if (states.blocking() != null) models.add(states.blocking());
+        return models;
     }
 
     private boolean putAsset(ZipOutputStream zip, File directory, String configuredPath, String packPath, String warning)

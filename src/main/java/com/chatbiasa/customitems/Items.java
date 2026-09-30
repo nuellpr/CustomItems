@@ -1,7 +1,9 @@
 package com.chatbiasa.customitems;
 
 import io.papermc.paper.datacomponent.DataComponentTypes;
+import io.papermc.paper.datacomponent.item.Equippable;
 import io.papermc.paper.datacomponent.item.ItemLore;
+import net.kyori.adventure.key.Key;
 import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
@@ -10,6 +12,7 @@ import org.bukkit.attribute.Attribute;
 import org.bukkit.attribute.AttributeModifier;
 import org.bukkit.configuration.ConfigurationSection;
 import org.bukkit.configuration.file.YamlConfiguration;
+import org.bukkit.inventory.EquipmentSlot;
 import org.bukkit.inventory.EquipmentSlotGroup;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
@@ -85,11 +88,15 @@ public final class Items {
             }
             String texture = s.getString("texture", key + ".png");
             String model = externalModel(s, key);
+            ItemDef.ModelStates modelStates = modelStates(s, base, key, model);
+            String armorModel = armorModel(s, base, key);
             ItemDef def = new ItemDef(
                     lower,
                     base,
                     texture,
                     model,
+                    modelStates,
+                    armorModel,
                     MiniMessage.miniMessage().deserialize(s.getString("name", key)),
                     s.getStringList("lore").stream()
                             .map(l -> MiniMessage.miniMessage().deserialize(l))
@@ -118,6 +125,99 @@ public final class Items {
         return model.toString();
     }
 
+    private ItemDef.ModelStates modelStates(ConfigurationSection item, Material base, String key, String model) {
+        ConfigurationSection states = item.getConfigurationSection("model-states");
+        if (states == null) {
+            if (item.contains("model-states")) plugin.getLogger().warning("items.yml: model-states for '" + key
+                    + "' must be a section; ignoring it");
+            return new ItemDef.ModelStates(List.of(), null, null, null, null);
+        }
+        for (String field : states.getKeys(false)) {
+            if (!List.of("pulling", "charged", "firework", "cast", "blocking").contains(field)) {
+                plugin.getLogger().warning("items.yml: unknown model-states field '" + field + "' for '" + key + "'");
+            }
+        }
+        List<String> pulling = stateModels(states, "pulling", key);
+        String charged = stateModel(states, "charged", key);
+        String firework = stateModel(states, "firework", key);
+        String cast = stateModel(states, "cast", key);
+        String blocking = stateModel(states, "blocking", key);
+        if (!pulling.isEmpty() && pulling.size() != 3) {
+            plugin.getLogger().warning("items.yml: model-states.pulling for '" + key
+                    + "' must contain exactly 3 model paths; ignoring it");
+            pulling = List.of();
+        }
+        if (base != Material.BOW && base != Material.CROSSBOW && !pulling.isEmpty()) {
+            plugin.getLogger().warning("items.yml: model-states.pulling only applies to bows/crossbows for '" + key + "'");
+            pulling = List.of();
+        }
+        if (base != Material.CROSSBOW && (charged != null || firework != null)) {
+            plugin.getLogger().warning("items.yml: charged/firework model states only apply to crossbows for '" + key + "'");
+            charged = firework = null;
+        }
+        if (base != Material.FISHING_ROD && cast != null) {
+            plugin.getLogger().warning("items.yml: model-states.cast only applies to fishing rods for '" + key + "'");
+            cast = null;
+        }
+        if (base != Material.SHIELD && blocking != null) {
+            plugin.getLogger().warning("items.yml: model-states.blocking only applies to shields for '" + key + "'");
+            blocking = null;
+        }
+        if (model == null && (!pulling.isEmpty() || charged != null || firework != null || cast != null || blocking != null)) {
+            plugin.getLogger().warning("items.yml: model-states requires model for '" + key + "'; ignoring them");
+            return new ItemDef.ModelStates(List.of(), null, null, null, null);
+        }
+        return new ItemDef.ModelStates(pulling, charged, firework, cast, blocking);
+    }
+
+    private List<String> stateModels(ConfigurationSection states, String field, String key) {
+        if (!states.contains(field)) return List.of();
+        List<?> values = states.getList(field);
+        if (values == null) {
+            plugin.getLogger().warning("items.yml: model-states." + field + " for '" + key + "' must be a list");
+            return List.of();
+        }
+        List<String> models = new ArrayList<>();
+        for (Object value : values) {
+            String model = stateModel(value, "model-states." + field, key);
+            if (model == null) return List.of();
+            models.add(model);
+        }
+        return List.copyOf(models);
+    }
+
+    private String stateModel(ConfigurationSection states, String field, String key) {
+        if (!states.contains(field)) return null;
+        return stateModel(states.get(field), "model-states." + field, key);
+    }
+
+    private String stateModel(Object value, String path, String key) {
+        if (!(value instanceof String text) || text.isBlank()) {
+            plugin.getLogger().warning("items.yml: " + path + " for '" + key + "' must be a namespaced model path");
+            return null;
+        }
+        NamespacedKey model = NamespacedKey.fromString(text.toLowerCase(Locale.ROOT));
+        if (model == null) {
+            plugin.getLogger().warning("items.yml: invalid " + path + " model for '" + key + "'; ignoring it");
+            return null;
+        }
+        return model.toString();
+    }
+
+    private String armorModel(ConfigurationSection item, Material base, String key) {
+        if (!item.contains("armor-model")) return null;
+        String value = item.getString("armor-model");
+        NamespacedKey model = value == null ? null : NamespacedKey.fromString(value.toLowerCase(Locale.ROOT));
+        EquipmentSlot slot = base.getEquipmentSlot();
+        if (model == null || (slot != EquipmentSlot.HEAD && slot != EquipmentSlot.CHEST
+                && slot != EquipmentSlot.LEGS && slot != EquipmentSlot.FEET)) {
+            plugin.getLogger().warning("items.yml: invalid armor-model for '" + key
+                    + "' (requires a namespaced asset and a helmet, chestplate, leggings or boots material)");
+            return null;
+        }
+        return model.toString();
+    }
+
     public ItemDef get(String key) {
         return key == null ? null : byKey.get(key.toLowerCase(Locale.ROOT));
     }
@@ -134,6 +234,9 @@ public final class Items {
             s.setData(DataComponentTypes.LORE, ItemLore.lore(def.lore()));
         }
         s.editPersistentDataContainer(pdc -> pdc.set(idKey, PersistentDataType.STRING, def.key()));
+        if (def.armorModel() != null) {
+            s.setData(DataComponentTypes.EQUIPPABLE, withArmorModel(s, def));
+        }
         if (hasAttributes(def)) {
             ItemMeta meta = s.getItemMeta();
             // Adding an explicit modifier component replaces the material defaults, so copy them
@@ -317,11 +420,30 @@ public final class Items {
         ItemDef def = byKey.get(key.toLowerCase(Locale.ROOT));
         if (def == null) return false;
         NamespacedKey model = new NamespacedKey(plugin, def.key());
-        if (model.equals(stack.getData(DataComponentTypes.ITEM_MODEL))
-                && !stack.hasData(DataComponentTypes.CUSTOM_MODEL_DATA)) return false;
-        stack.setData(DataComponentTypes.ITEM_MODEL, model);
-        stack.unsetData(DataComponentTypes.CUSTOM_MODEL_DATA);
-        return true;
+        boolean changed = false;
+        if (!model.equals(stack.getData(DataComponentTypes.ITEM_MODEL))
+                || stack.hasData(DataComponentTypes.CUSTOM_MODEL_DATA)) {
+            stack.setData(DataComponentTypes.ITEM_MODEL, model);
+            stack.unsetData(DataComponentTypes.CUSTOM_MODEL_DATA);
+            changed = true;
+        }
+        if (def.armorModel() != null) {
+            Equippable current = stack.getData(DataComponentTypes.EQUIPPABLE);
+            if (current == null || !Key.key(def.armorModel()).equals(current.assetId())
+                    || current.slot() != def.base().getEquipmentSlot()) {
+                stack.setData(DataComponentTypes.EQUIPPABLE, withArmorModel(stack, def));
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
+    private static Equippable withArmorModel(ItemStack stack, ItemDef def) {
+        Equippable current = stack.getData(DataComponentTypes.EQUIPPABLE);
+        Equippable.Builder builder = current == null
+                ? Equippable.equippable(def.base().getEquipmentSlot())
+                : current.toBuilder();
+        return builder.assetId(Key.key(def.armorModel())).build();
     }
 
     public String id(ItemStack stack) {
