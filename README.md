@@ -238,6 +238,8 @@ java tools/CustomItemsTools.java import-itemsadder --zip "D:\MC\elitecreatures-f
 
 Tool membuat konfigurasi item terpisah di `imports/`, menyalin model/tekstur/equipment asset ke `pack-assets/assets/`, dan menyalin ikon generated-texture ke `textures/`. Pilih satu format importer untuk satu pack. Setelah selesai, jalankan `/ci reload`; item hasil impor dapat diberikan dengan `/ci give <key>`. Model state Oraxen yang umum diterjemahkan ke format item model Minecraft 26.2; ItemsAdder state dideteksi dari nama file model yang berakhiran standar. Mekanik furniture/hat masih belum diterjemahkan.
 
+Saat memperbarui impor dari versi 0.8.4, backup folder data plugin lalu salin ulang ZIP setup yang sesuai dan izinkan file impor bernama sama diperbarui. Gabungkan folder `pack-assets/` dan `textures/`; jangan hapus `config.yml`, `block-states.yml`, atau `placed-blocks.txt`. Item armor lama akan menerima equipment model baru saat inventory pemain dimigrasikan.
+
 ### blocks.yml
 
 ```yaml
