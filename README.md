@@ -144,7 +144,39 @@ items:
     texture: ruby_sword.png  # PNG di plugins/CustomItems/textures/
     name: "<red>Ruby Sword"
     lore: ["<gray>Pedang legendaris"]
+    damage: 4.0              # bonus ADD_NUMBER di atas atribut vanilla
+    attack-speed: 0.5        # bonus ADD_NUMBER saat dipegang di tangan utama
+    effects:
+      held:                  # aktif selama item dipegang di tangan utama
+        - type: strength
+          amplifier: 0       # 0 = level I
+          duration: 40       # 20–40 tick; diperbarui tiap detik
+      use:                   # aktif pada klik-kanan
+        - type: regeneration
+          amplifier: 0
+          duration: 100      # tick
+    abilities:
+      on-hit:
+        - type: potion       # efek diberikan ke target yang terkena serangan langsung
+          effect: slowness
+          amplifier: 0
+          duration: 60       # tick
+          chance: 0.25       # 0.0–1.0
+          cooldown: 3        # detik per pemain dan ability
+      on-right-click:
+        - type: heal          # heal hanya didukung untuk on-right-click
+          amount: 4.0         # health point, maksimum 2048
+          chance: 1.0
+          cooldown: 10
+
+  ruby_chestplate:
+    base: DIAMOND_CHESTPLATE
+    texture: ruby_chestplate.png
+    name: "<red>Ruby Chestplate"
+    armor: 4.0               # bonus armor pada slot equipment material dasar
 ```
+
+Semua field tambahan opsional. Jika tidak ada, item tetap berperilaku seperti sebelumnya. `damage`, `armor`, dan `attack-speed` adalah bonus angka tetap yang ditambahkan di atas atribut bawaan material; armor memakai slot equipment dari material dasar. Efek `held` hanya memeriksa tangan utama, durasinya 20–40 tick dan efek yang aktif selesai setelah item dilepas. Efek `use` dan ability `on-right-click` dipicu pada klik-kanan. `on-hit` hanya berlaku untuk serangan langsung pemain, bukan panah/proyektil. Efek potion yang lebih kuat tidak ditimpa. Nilai di luar rentang atau tipe ability/efek yang tidak dikenal memberi warning di console dan entri tersebut dilewati.
 
 ### blocks.yml
 

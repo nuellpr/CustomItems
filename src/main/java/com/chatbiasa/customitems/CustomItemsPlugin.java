@@ -14,6 +14,7 @@ public final class CustomItemsPlugin extends JavaPlugin {
     private PackBuilder pack;
     private PackServer packServer;
     private GuiMenu gui;
+    private ItemBehaviorListener itemBehavior;
     private String packUrl;
 
     @Override
@@ -42,6 +43,9 @@ public final class CustomItemsPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new BlockListener(this), this);
         getServer().getPluginManager().registerEvents(new ChatListener(this), this);
         getServer().getPluginManager().registerEvents(mobs, this);
+        itemBehavior = new ItemBehaviorListener(this);
+        getServer().getPluginManager().registerEvents(itemBehavior, this);
+        itemBehavior.start();
         gui = new GuiMenu(this);
         getServer().getPluginManager().registerEvents(gui, this);
         getCommand("ci").setExecutor(new GiveCommand(this));
@@ -51,6 +55,7 @@ public final class CustomItemsPlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (itemBehavior != null) itemBehavior.shutdown();
         if (blocks != null) blocks.shutdown();
         if (packServer != null) packServer.stop();
     }
