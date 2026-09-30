@@ -13,6 +13,7 @@ public record ItemDef(
         String model,
         ModelStates modelStates,
         String armorModel,
+        Furniture furniture,
         Component name,
         List<Component> lore,
         Double damageBonus,
@@ -45,6 +46,9 @@ public record ItemDef(
     }
 
     public record PotionEffectDef(PotionEffectType type, int amplifier, int duration) {}
+
+    public record Furniture(boolean fixedRotation, float hitboxWidth, float hitboxHeight,
+                            float offsetX, float offsetY, float offsetZ) {}
 
     public enum AbilityType { POTION, HEAL }
 

@@ -216,9 +216,20 @@ items:
     base: LEATHER_HELMET
     model: "mynamespace:armor/custom_helmet"
     armor-model: "mynamespace:custom_armor"
+
+  crystal_chest:
+    base: PAPER
+    model: "mynamespace:furniture/crystal_chest"
+    furniture:
+      fixed-rotation: true
+      hitbox:
+        width: 1
+        height: 1
 ```
 
 Semua field tambahan opsional. Jika tidak ada, item tetap berperilaku seperti sebelumnya. `damage`, `armor`, dan `attack-speed` adalah bonus angka tetap yang ditambahkan di atas atribut bawaan material; armor memakai slot equipment dari material dasar. Bonus atribut dicatat saat stack item dibuat, jadi setelah mengubah stat, berikan ulang item dengan `/ci give <key>`. Efek `held` hanya memeriksa tangan utama, durasinya 20–40 tick dan efek yang aktif selesai setelah item dilepas. Efek `use` dan ability `on-right-click` dipicu pada klik-kanan. `on-hit` hanya berlaku untuk serangan langsung pemain, bukan panah/proyektil. Efek potion yang lebih kuat tidak ditimpa. Nilai di luar rentang atau tipe ability/efek yang tidak dikenal memberi warning di console dan entri tersebut dilewati.
+
+Furniture hanya ditempatkan dengan klik-kanan pada sisi atas blok solid dan dapat diambil kembali dengan memukul hitbox-nya. Pemain bisa berjalan melewati hitbox; collision solid, pemasangan ke dinding/langit-langit, dan mekanik khusus furniture belum didukung.
 
 Untuk model dari resource pack lain, set `model: minecraft:elitecreatures/fairy_heart_zeref_animated_weapon_set/sword` dan letakkan file JSON di `pack-assets/assets/minecraft/models/elitecreatures/...`; tekstur pasangannya di `pack-assets/assets/minecraft/textures/elitecreatures/...`. `model-states.pulling` berisi tiga model bow/crossbow sesuai urutan tarik; `charged`, `firework`, `cast`, dan `blocking` adalah model untuk state crossbow, pancing, dan shield. `armor-model` menunjuk equipment JSON di `pack-assets/assets/<namespace>/equipment/<path>.json`. Importer Oraxen/ItemsAdder membuat konfigurasi state dan equipment untuk pola umum pack tersebut. File aset yang sudah ada tidak ditimpa.
 
@@ -238,7 +249,7 @@ java tools/CustomItemsTools.java import-itemsadder --zip "D:\MC\elitecreatures-f
 
 Tool membuat konfigurasi item terpisah di `imports/`, menyalin model/tekstur/equipment asset ke `pack-assets/assets/`, dan menyalin ikon generated-texture ke `textures/`. Importer Oraxen memproses semua file `items/**/*.yml`, bukan hanya satu file; importer ItemsAdder memproses semua `contents/*/configs/*.yml`. Key item duplikat dilewati agar satu impor tidak menimpa item lain.
 
-Setiap impor menghasilkan laporan `imports/<nama-zip>-oraxen-import-report.txt` atau `imports/<nama-zip>-itemsadder-import-report.txt`. Laporan mencantumkan key yang berhasil dibuat, entri yang dilewati, asset yang disalin, serta mekanik yang dikenali tetapi belum diterjemahkan. Importer ItemsAdder membaca konfigurasi `resource` lama dan `graphics.model`/`graphics.texture` modern, termasuk model state yang didefinisikan untuk bow/crossbow/shield/fishing rod. Beberapa lapis texture state hanya mengambil texture normal; baca laporan untuk kasus tersebut. Importer juga mengenali pola armor tertentu. Ini belum merupakan migrasi penuh semua fitur Oraxen atau ItemsAdder: perilaku item, furniture/kendaraan, block, entity/mob, glyph/HUD, resep, komponen khusus, dan permission yang terdeteksi perlu dikonfigurasi atau dibuat ulang manual.
+Setiap impor menghasilkan laporan `imports/<nama-zip>-oraxen-import-report.txt` atau `imports/<nama-zip>-itemsadder-import-report.txt`. Laporan mencantumkan key yang berhasil dibuat, entri yang dilewati, asset yang disalin, serta mekanik yang dikenali tetapi belum diterjemahkan. Importer ItemsAdder membaca konfigurasi `resource` lama dan `graphics.model`/`graphics.texture` modern, termasuk model state bow/crossbow/shield/fishing rod, pola armor tertentu, dan furniture `armor_stand` yang hanya bisa dipasang di lantai. Furniture hasil impor bisa dipukul untuk diambil kembali, tetapi `solid: true` tidak menghasilkan collision dan pemasangan ke dinding/langit-langit, hat, kendaraan, block, entity/mob, glyph/HUD, resep, komponen khusus, serta permission masih perlu ditangani terpisah. Beberapa lapis texture state hanya mengambil texture normal; baca laporan impor untuk batasan per item.
 
 Setelah selesai, baca laporan impor, jalankan `/ci reload`, lalu item hasil impor dapat diberikan dengan `/ci give <key>`.
 

@@ -409,6 +409,26 @@ public final class CustomItemsTools {
                     } else if (item.armorModel() != null) {
                         report.note(item.key() + ": ItemsAdder armor set not found (" + item.armorModel() + ")");
                     }
+                    if (item.furniture() != null) {
+                        ImportedFurniture furniture = item.furniture();
+                        if (!furniture.supportsFloorPlacement()) {
+                            report.note(item.key() + ": furniture not imported; only floor-placeable armor_stand furniture is supported");
+                        } else {
+                            double width = Math.max(furniture.length(), furniture.width());
+                            generated.append("    furniture:\n")
+                                    .append("      fixed-rotation: ").append(furniture.fixedRotation()).append('\n')
+                                    .append("      hitbox:\n")
+                                    .append("        width: ").append(width).append('\n')
+                                    .append("        height: ").append(furniture.height()).append('\n')
+                                    .append("        offset-x: ").append(furniture.widthOffset()).append('\n')
+                                    .append("        offset-y: ").append(furniture.heightOffset()).append('\n')
+                                    .append("        offset-z: ").append(furniture.lengthOffset()).append('\n');
+                            if (furniture.solid()) report.note(item.key()
+                                    + ": ItemsAdder solid=true collision is not reproduced; the imported hitbox is clickable but non-solid");
+                            if (Double.compare(furniture.length(), furniture.width()) != 0) report.note(item.key()
+                                    + ": rectangular furniture hitbox approximated as a square clickable hitbox");
+                        }
+                    }
                     importedKeys.add(item.key());
                     report.imported(item.key());
                 }
@@ -429,9 +449,11 @@ public final class CustomItemsTools {
         String graphicsModel = null, graphicsTexture = null, armorSlot = null, armorModel = null;
         Map<String, String> graphicsModels = new LinkedHashMap<>();
         Map<String, String> graphicsTextures = new LinkedHashMap<>();
+        ItemsAdderFurniture furniture = new ItemsAdderFurniture();
         int textureCount = 0;
         boolean inItems = false, inArmors = false, inResource = false, inGraphics = false;
         boolean inGraphicsModels = false, inGraphicsTextures = false, inArmorProperties = false, readingTextures = false;
+        boolean inBehaviours = false, inFurniture = false;
         for (String line : yaml.split("\\R")) {
             if (!inItems) {
                 Matcher namespaceField = Pattern.compile("^ {2}namespace:\\s*(.*?)\\s*$").matcher(line);
@@ -464,19 +486,21 @@ public final class CustomItemsTools {
             if (itemStart.matches()) {
                 addItemsAdderItem(items, namespace, key, base, name, legacyModel, legacyTexture,
                         graphicsModel, graphicsTexture, graphicsModels, graphicsTextures,
-                        armorSlot, armorModel, textureCount);
+                        armorSlot, armorModel, textureCount, furniture.build());
                 key = itemStart.group(1).toLowerCase(Locale.ROOT);
                 base = name = legacyModel = legacyTexture = graphicsModel = graphicsTexture = armorSlot = armorModel = null;
                 graphicsModels = new LinkedHashMap<>();
                 graphicsTextures = new LinkedHashMap<>();
+                furniture = new ItemsAdderFurniture();
                 textureCount = 0;
                 inResource = inGraphics = inGraphicsModels = inGraphicsTextures = inArmorProperties = readingTextures = false;
+                inBehaviours = inFurniture = false;
                 continue;
             }
             if (line.matches("^[^\\s#][^:]*:\\s*$")) {
                 addItemsAdderItem(items, namespace, key, base, name, legacyModel, legacyTexture,
                         graphicsModel, graphicsTexture, graphicsModels, graphicsTextures,
-                        armorSlot, armorModel, textureCount);
+                        armorSlot, armorModel, textureCount, furniture.build());
                 inItems = false;
                 break;
             }
@@ -485,8 +509,20 @@ public final class CustomItemsTools {
                 inResource = section.group(1).equals("resource");
                 inGraphics = section.group(1).equals("graphics");
                 inArmorProperties = section.group(1).equals("specific_properties");
+                inBehaviours = section.group(1).equals("behaviours");
+                inFurniture = false;
                 inGraphicsModels = inGraphicsTextures = readingTextures = false;
                 continue;
+            }
+            if (inBehaviours) {
+                Matcher behaviour = Pattern.compile("^ {6}([a-zA-Z0-9_-]+):\\s*(.*?)\\s*$").matcher(line);
+                if (behaviour.matches()) {
+                    inFurniture = behaviour.group(1).equals("furniture");
+                    furniture.section = "";
+                    if (inFurniture) furniture.present = true;
+                    continue;
+                }
+                if (inFurniture && furniture.read(line)) continue;
             }
             Matcher property = Pattern.compile("^ {4}(display_name|name|material):\\s*(.*?)\\s*$").matcher(line);
             if (property.matches()) {
@@ -545,7 +581,7 @@ public final class CustomItemsTools {
         }
         if (inItems) addItemsAdderItem(items, namespace, key, base, name, legacyModel, legacyTexture,
                 graphicsModel, graphicsTexture, graphicsModels, graphicsTextures,
-                armorSlot, armorModel, textureCount);
+                armorSlot, armorModel, textureCount, furniture.build());
         else addArmorRendering(armors, armorKey, layer1, layer2);
         return new ItemsAdderData(namespace, List.copyOf(items), List.copyOf(armors));
     }
@@ -554,7 +590,8 @@ public final class CustomItemsTools {
                                           String name, String legacyModel, String legacyTexture,
                                           String graphicsModel, String graphicsTexture,
                                           Map<String, String> graphicsModels, Map<String, String> graphicsTextures,
-                                          String armorSlot, String armorModel, int textureCount) {
+                                          String armorSlot, String armorModel, int textureCount,
+                                          ImportedFurniture furniture) {
         if (key == null) return;
         if (base == null) base = switch (armorSlot == null ? "" : armorSlot) {
             case "head" -> "LEATHER_HELMET";
@@ -589,7 +626,7 @@ public final class CustomItemsTools {
             ImportedStates states = new ImportedStates(pulling.size() == 3 ? pulling : List.of(),
                     charged, firework, cast, blocking);
             items.add(new ItemsAdderItem(key, base, name == null || name.isBlank() ? key : name,
-                    model, texture, armorSlot, armorModel, textureCount, states));
+                    model, texture, armorSlot, armorModel, textureCount, states, furniture));
         }
     }
 
@@ -983,15 +1020,88 @@ public final class CustomItemsTools {
 
     private record ImportedItem(String key, String base, String name, String model, String texture, ImportedStates states) {}
     private record ItemsAdderItem(String key, String base, String name, String model, String texture,
-                                  String armorSlot, String armorModel, int textureCount, ImportedStates states) {}
+                                  String armorSlot, String armorModel, int textureCount, ImportedStates states,
+                                  ImportedFurniture furniture) {}
     private record ItemsAdderData(String namespace, List<ItemsAdderItem> items, List<ArmorRendering> armors) {}
     private record ArmorRendering(String key, String layer1, String layer2) {}
+    private record ImportedFurniture(String entity, boolean floor, boolean walls, boolean ceiling,
+                                     boolean solid, boolean fixedRotation, double length, double width, double height,
+                                     double lengthOffset, double widthOffset, double heightOffset) {
+        private boolean supportsFloorPlacement() {
+            return "armor_stand".equalsIgnoreCase(entity) && floor && !walls && !ceiling
+                    && finiteRange(length, 0.1, 16) && finiteRange(width, 0.1, 16)
+                    && finiteRange(height, 0.1, 16) && finiteRange(lengthOffset, -16, 16)
+                    && finiteRange(widthOffset, -16, 16) && finiteRange(heightOffset, -16, 16);
+        }
+    }
+
+    private static boolean finiteRange(double value, double min, double max) {
+        return Double.isFinite(value) && value >= min && value <= max;
+    }
+
+    private static final class ItemsAdderFurniture {
+        private boolean present, floor, walls, ceiling, solid, fixedRotation;
+        private String entity, section = "";
+        private double length = 1, width = 1, height = 1, lengthOffset, widthOffset, heightOffset;
+
+        private boolean read(String line) {
+            Matcher nested = Pattern.compile("^ {8}(hitbox|placeable_on):\\s*$").matcher(line);
+            if (nested.matches()) {
+                section = nested.group(1);
+                return true;
+            }
+            Matcher property = Pattern.compile("^ {8}(entity|solid|fixed_rotation):\\s*(.*?)\\s*$").matcher(line);
+            if (property.matches()) {
+                String value = unquote(property.group(2));
+                switch (property.group(1)) {
+                    case "entity" -> entity = value;
+                    case "solid" -> solid = "true".equalsIgnoreCase(value);
+                    case "fixed_rotation" -> fixedRotation = "true".equalsIgnoreCase(value);
+                }
+                return true;
+            }
+            Matcher nestedProperty = Pattern.compile("^ {10}([a-zA-Z_]+):\\s*(.*?)\\s*$").matcher(line);
+            if (!nestedProperty.matches()) return false;
+            String value = unquote(nestedProperty.group(2));
+            if (section.equals("placeable_on")) {
+                switch (nestedProperty.group(1)) {
+                    case "floor" -> floor = "true".equalsIgnoreCase(value);
+                    case "walls" -> walls = "true".equalsIgnoreCase(value);
+                    case "ceiling" -> ceiling = "true".equalsIgnoreCase(value);
+                    default -> { return false; }
+                }
+                return true;
+            }
+            if (!section.equals("hitbox")) return false;
+            double number;
+            try {
+                number = Double.parseDouble(value);
+            } catch (NumberFormatException e) {
+                number = Double.NaN;
+            }
+            switch (nestedProperty.group(1)) {
+                case "length" -> length = number;
+                case "width" -> width = number;
+                case "height" -> height = number;
+                case "length_offset" -> lengthOffset = number;
+                case "width_offset" -> widthOffset = number;
+                case "height_offset" -> heightOffset = number;
+                default -> { return false; }
+            }
+            return true;
+        }
+
+        private ImportedFurniture build() {
+            return present ? new ImportedFurniture(entity, floor, walls, ceiling, solid, fixedRotation,
+                    length, width, height, lengthOffset, widthOffset, heightOffset) : null;
+        }
+    }
 
     private static final class ImportReport {
         private static final Map<String, String> UNTRANSLATED_KEYS = Map.ofEntries(
                 Map.entry("mechanics", "Oraxen mechanics"),
                 Map.entry("components", "Item components and attributes"),
-                Map.entry("behaviours", "ItemsAdder behaviors"),
+                Map.entry("behaviours", "ItemsAdder behaviors (only floor furniture is imported)"),
                 Map.entry("events", "Gameplay event actions"),
                 Map.entry("lore", "Item lore"),
                 Map.entry("permission", "Per-item permissions"),
@@ -1000,7 +1110,6 @@ public final class CustomItemsTools {
                 Map.entry("huds", "HUD definitions"),
                 Map.entry("font_images", "Font images and glyphs"),
                 Map.entry("recipes", "Custom recipes"),
-                Map.entry("furniture", "Furniture mechanics"),
                 Map.entry("vehicle", "Vehicle mechanics"),
                 Map.entry("vehicles", "Vehicle mechanics"),
                 Map.entry("icon", "Separate inventory icon graphics"),
@@ -1063,7 +1172,8 @@ public final class CustomItemsTools {
                     .append("Imported items: ").append(imported.size()).append('\n')
                     .append("Copied model/texture/equipment assets: ").append(assets).append(" files\n\n")
                     .append("Translated fields: item key, base material, display name, supported model/texture,")
-                    .append(" recognized bow/crossbow/shield/fishing-rod model states, and recognized armor assets.\n")
+                    .append(" recognized bow/crossbow/shield/fishing-rod model states, recognized armor assets,")
+                    .append(" and floor-placeable armor-stand furniture.\n")
                     .append("This importer is partial: unsupported source configuration is not applied automatically.\n\n")
                     .append("Detected but not translated:\n");
             if (untranslated.isEmpty()) text.append("- No known unsupported keys detected in scanned item configuration files.\n");

@@ -90,6 +90,7 @@ public final class Items {
             String model = externalModel(s, key);
             ItemDef.ModelStates modelStates = modelStates(s, base, key, model);
             String armorModel = armorModel(s, base, key);
+            ItemDef.Furniture furniture = furniture(s, key);
             ItemDef def = new ItemDef(
                     lower,
                     base,
@@ -97,6 +98,7 @@ public final class Items {
                     model,
                     modelStates,
                     armorModel,
+                    furniture,
                     MiniMessage.miniMessage().deserialize(s.getString("name", key)),
                     s.getStringList("lore").stream()
                             .map(l -> MiniMessage.miniMessage().deserialize(l))
@@ -111,6 +113,49 @@ public final class Items {
             );
             byKey.put(def.key(), def);
         }
+    }
+
+    private ItemDef.Furniture furniture(ConfigurationSection item, String key) {
+        if (!item.contains("furniture")) return null;
+        ConfigurationSection section = item.getConfigurationSection("furniture");
+        if (section == null) {
+            plugin.getLogger().warning("items.yml: furniture for '" + key + "' must be a section; ignoring it");
+            return null;
+        }
+        ConfigurationSection hitbox = section.getConfigurationSection("hitbox");
+        if (section.contains("hitbox") && hitbox == null) {
+            plugin.getLogger().warning("items.yml: furniture.hitbox for '" + key
+                    + "' must be a section; ignoring furniture");
+            return null;
+        }
+        double width = furnitureNumber(hitbox, "width", 1, 0.1, 16, key);
+        double height = furnitureNumber(hitbox, "height", 1, 0.1, 16, key);
+        double offsetX = furnitureNumber(hitbox, "offset-x", 0, -16, 16, key);
+        double offsetY = furnitureNumber(hitbox, "offset-y", 0, -16, 16, key);
+        double offsetZ = furnitureNumber(hitbox, "offset-z", 0, -16, 16, key);
+        if (!Double.isFinite(width) || !Double.isFinite(height) || !Double.isFinite(offsetX)
+                || !Double.isFinite(offsetY) || !Double.isFinite(offsetZ)) return null;
+        Object fixedRotation = section.get("fixed-rotation", false);
+        if (!(fixedRotation instanceof Boolean)) {
+            plugin.getLogger().warning("items.yml: furniture.fixed-rotation for '" + key
+                    + "' must be true or false; using false");
+            fixedRotation = false;
+        }
+        return new ItemDef.Furniture((Boolean) fixedRotation, (float) width, (float) height,
+                (float) offsetX, (float) offsetY, (float) offsetZ);
+    }
+
+    private double furnitureNumber(ConfigurationSection section, String field, double fallback,
+                                    double minimum, double maximum, String key) {
+        if (section == null || !section.contains(field)) return fallback;
+        Object value = section.get(field);
+        if (!(value instanceof Number number) || !Double.isFinite(number.doubleValue())
+                || number.doubleValue() < minimum || number.doubleValue() > maximum) {
+            plugin.getLogger().warning("items.yml: furniture.hitbox." + field + " for '" + key + "' must be between "
+                    + minimum + " and " + maximum + "; ignoring furniture");
+            return Double.NaN;
+        }
+        return number.doubleValue();
     }
 
     private String externalModel(ConfigurationSection item, String key) {

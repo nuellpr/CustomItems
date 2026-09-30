@@ -48,6 +48,7 @@ public final class CustomItemsPlugin extends JavaPlugin {
         }
         getServer().getPluginManager().registerEvents(new JoinListener(this), this);
         getServer().getPluginManager().registerEvents(new BlockListener(this), this);
+        getServer().getPluginManager().registerEvents(new FurnitureListener(this), this);
         getServer().getPluginManager().registerEvents(new ChatListener(this), this);
         getServer().getPluginManager().registerEvents(mobs, this);
         itemBehavior = new ItemBehaviorListener(this);

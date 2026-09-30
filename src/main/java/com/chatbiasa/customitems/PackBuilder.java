@@ -270,16 +270,21 @@ public final class PackBuilder {
 
     private static String itemDefinition(ItemDef def, String defaultModel) {
         ItemDef.ModelStates states = def.modelStates();
-        if (states.isEmpty()) return model(defaultModel);
+        if (states.isEmpty()) return plainModel(defaultModel);
         return switch (def.base()) {
-            case BOW -> states.pulling().size() == 3 ? bowDefinition(defaultModel, states.pulling()) : model(defaultModel);
+            case BOW -> states.pulling().size() == 3 ? bowDefinition(defaultModel, states.pulling()) : plainModel(defaultModel);
             case CROSSBOW -> crossbowDefinition(defaultModel, states);
-            case FISHING_ROD -> states.cast() == null ? model(defaultModel)
+            case FISHING_ROD -> states.cast() == null ? plainModel(defaultModel)
                     : condition("minecraft:fishing_rod/cast", model(defaultModel), model(states.cast()));
-            case SHIELD -> states.blocking() == null ? model(defaultModel)
+            case SHIELD -> states.blocking() == null ? plainModel(defaultModel)
                     : condition("minecraft:using_item", model(defaultModel), model(states.blocking()));
-            default -> model(defaultModel);
+            default -> plainModel(defaultModel);
         };
+    }
+
+    // assets/<ns>/items/<key>.json must nest the model object under "model".
+    private static String plainModel(String id) {
+        return "{\"model\":" + model(id) + "}";
     }
 
     private static String bowDefinition(String base, List<String> pulling) {
