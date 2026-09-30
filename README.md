@@ -176,7 +176,7 @@ items:
     armor: 4.0               # bonus armor pada slot equipment material dasar
 ```
 
-Semua field tambahan opsional. Jika tidak ada, item tetap berperilaku seperti sebelumnya. `damage`, `armor`, dan `attack-speed` adalah bonus angka tetap yang ditambahkan di atas atribut bawaan material; armor memakai slot equipment dari material dasar. Efek `held` hanya memeriksa tangan utama, durasinya 20–40 tick dan efek yang aktif selesai setelah item dilepas. Efek `use` dan ability `on-right-click` dipicu pada klik-kanan. `on-hit` hanya berlaku untuk serangan langsung pemain, bukan panah/proyektil. Efek potion yang lebih kuat tidak ditimpa. Nilai di luar rentang atau tipe ability/efek yang tidak dikenal memberi warning di console dan entri tersebut dilewati.
+Semua field tambahan opsional. Jika tidak ada, item tetap berperilaku seperti sebelumnya. `damage`, `armor`, dan `attack-speed` adalah bonus angka tetap yang ditambahkan di atas atribut bawaan material; armor memakai slot equipment dari material dasar. Bonus atribut dicatat saat stack item dibuat, jadi setelah mengubah stat, berikan ulang item dengan `/ci give <key>`. Efek `held` hanya memeriksa tangan utama, durasinya 20–40 tick dan efek yang aktif selesai setelah item dilepas. Efek `use` dan ability `on-right-click` dipicu pada klik-kanan. `on-hit` hanya berlaku untuk serangan langsung pemain, bukan panah/proyektil. Efek potion yang lebih kuat tidak ditimpa. Nilai di luar rentang atau tipe ability/efek yang tidak dikenal memberi warning di console dan entri tersebut dilewati.
 
 ### blocks.yml
 
