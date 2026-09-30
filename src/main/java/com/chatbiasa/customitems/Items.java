@@ -19,7 +19,9 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
@@ -50,6 +52,17 @@ public final class Items {
         if (!f.exists()) {
             plugin.saveResource("items.yml", false);
         }
+        loadFile(f);
+        File imports = new File(plugin.getDataFolder(), "imports");
+        File[] imported = imports.listFiles(file -> file.isFile() && file.getName().endsWith(".yml"));
+        if (imported != null) {
+            Arrays.sort(imported, Comparator.comparing(File::getName, String.CASE_INSENSITIVE_ORDER));
+            for (File file : imported) loadFile(file);
+        }
+        plugin.getLogger().info("Loaded " + byKey.size() + " custom items");
+    }
+
+    private void loadFile(File f) {
         YamlConfiguration yml = YamlConfiguration.loadConfiguration(f);
         ConfigurationSection items = yml.getConfigurationSection("items");
         if (items == null) return;
@@ -71,10 +84,12 @@ public final class Items {
                 continue;
             }
             String texture = s.getString("texture", key + ".png");
+            String model = externalModel(s, key);
             ItemDef def = new ItemDef(
                     lower,
                     base,
                     texture,
+                    model,
                     MiniMessage.miniMessage().deserialize(s.getString("name", key)),
                     s.getStringList("lore").stream()
                             .map(l -> MiniMessage.miniMessage().deserialize(l))
@@ -89,7 +104,18 @@ public final class Items {
             );
             byKey.put(def.key(), def);
         }
-        plugin.getLogger().info("Loaded " + byKey.size() + " custom items");
+    }
+
+    private String externalModel(ConfigurationSection item, String key) {
+        String value = item.getString("model");
+        if (value == null || value.isBlank()) return null;
+        NamespacedKey model = NamespacedKey.fromString(value.toLowerCase(Locale.ROOT));
+        if (model == null) {
+            plugin.getLogger().warning("items.yml: invalid model for '" + key
+                    + "' (expected namespace:path); using the generated texture model");
+            return null;
+        }
+        return model.toString();
     }
 
     public ItemDef get(String key) {

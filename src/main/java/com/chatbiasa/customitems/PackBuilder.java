@@ -10,6 +10,8 @@ import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
 import java.util.List;
+import java.util.Locale;
+import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 import org.bukkit.NamespacedKey;
@@ -37,6 +39,7 @@ public final class PackBuilder {
             put(zip, "pack.mcmeta", """
                     {"pack":{"pack_format":%d,"min_format":%d,"max_format":%d,"description":"CustomItems pack"}}""".formatted(
                     fmt, fmt, fmt));
+            putImportedAssets(zip);
             // Give custom stacks their own item-model IDs. This avoids replacing
             // assets/minecraft/items/<base>.json, which would change the model for every vanilla
             // stack of that material (including state-driven models such as bows and crossbows).
@@ -44,14 +47,23 @@ public final class PackBuilder {
                 String base = def.base().getKey().getKey();
                 String parent = base.matches(".*(sword|pickaxe|axe|shovel|hoe|bow|trident)")
                         ? "minecraft:item/handheld" : "minecraft:item/generated";
-                put(zip, "assets/" + namespace + "/items/" + def.key() + ".json",
-                        "{\"model\":{\"type\":\"minecraft:model\",\"model\":\"" + namespace
-                                + ":item/" + def.key() + "\"}}");
-                put(zip, "assets/" + namespace + "/models/item/" + def.key() + ".json",
-                        "{\"parent\":\"" + parent + "\",\"textures\":{\"layer0\":\"" + namespace
-                                + ":item/" + def.key() + "\"}}");
-                putAsset(zip, textures, def.texture(), "assets/" + namespace + "/textures/item/" + def.key() + ".png",
-                        "Missing or unsafe texture for '" + def.key() + "': " + def.texture());
+                if (def.model() == null) {
+                    put(zip, "assets/" + namespace + "/items/" + def.key() + ".json",
+                            "{\"model\":{\"type\":\"minecraft:model\",\"model\":\"" + namespace
+                                    + ":item/" + def.key() + "\"}}");
+                    put(zip, "assets/" + namespace + "/models/item/" + def.key() + ".json",
+                            "{\"parent\":\"" + parent + "\",\"textures\":{\"layer0\":\"" + namespace
+                                    + ":item/" + def.key() + "\"}}");
+                    putAsset(zip, textures, def.texture(), "assets/" + namespace + "/textures/item/" + def.key() + ".png",
+                            "Missing or unsafe texture for '" + def.key() + "': " + def.texture());
+                } else {
+                    put(zip, "assets/" + namespace + "/items/" + def.key() + ".json",
+                            "{\"model\":{\"type\":\"minecraft:model\",\"model\":\"" + def.model() + "\"}}");
+                    if (!importedModelExists(def.model())) {
+                        plugin.getLogger().warning("Missing imported model for '" + def.key() + "': " + def.model()
+                                + " (copy its JSON under pack-assets/assets/<namespace>/models/)");
+                    }
+                }
             }
             // Custom blocks are note blocks whose instrument+note blockstate selects our own model --
             // the same mechanism Oraxen and ItemsAdder use. A note block has no block entity, so the
@@ -175,6 +187,61 @@ public final class PackBuilder {
             input.transferTo(zip);
         }
         zip.closeEntry();
+    }
+
+    private void putImportedAssets(ZipOutputStream zip) throws IOException {
+        Path root = new File(plugin.getDataFolder(), "pack-assets/assets").toPath();
+        if (!Files.isDirectory(root)) return;
+        Path realRoot = root.toRealPath();
+        try (Stream<Path> namespaces = Files.list(realRoot)) {
+            for (Path namespaceDir : namespaces.sorted().toList()) {
+                String namespace = namespaceDir.getFileName().toString();
+                if (!namespace.matches("[a-z0-9._-]+") || !Files.isDirectory(namespaceDir)) {
+                    plugin.getLogger().warning("Ignoring invalid resource-pack namespace: " + namespace);
+                    continue;
+                }
+                for (String kind : List.of("models", "textures")) {
+                    Path kindDir = namespaceDir.resolve(kind);
+                    if (!Files.isDirectory(kindDir)) continue;
+                    try (Stream<Path> files = Files.walk(kindDir)) {
+                        for (Path file : files.sorted().toList()) {
+                            if (!Files.isRegularFile(file)) continue;
+                            Path realFile = file.toRealPath();
+                            if (!realFile.startsWith(realRoot)) {
+                                plugin.getLogger().warning("Ignoring imported asset outside pack-assets: " + file);
+                                continue;
+                            }
+                            String relative = kindDir.relativize(file).toString().replace('\\', '/');
+                            String firstPart = relative.contains("/") ? relative.substring(0, relative.indexOf('/')) : relative;
+                            if ((kind.equals("models") && List.of("item", "block").contains(firstPart))
+                                    || (kind.equals("textures") && List.of("item", "block", "font").contains(firstPart))) {
+                                plugin.getLogger().warning("Ignoring imported asset in reserved path: " + relative);
+                                continue;
+                            }
+                            String lower = relative.toLowerCase(Locale.ROOT);
+                            if (!(lower.endsWith(".json") || lower.endsWith(".png") || lower.endsWith(".mcmeta"))) {
+                                plugin.getLogger().warning("Ignoring unsupported imported asset: " + relative);
+                                continue;
+                            }
+                            putFile(zip, "assets/" + namespace + "/" + kind + "/" + relative, realFile.toFile());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private boolean importedModelExists(String model) {
+        NamespacedKey key = NamespacedKey.fromString(model);
+        if (key == null) return false;
+        Path root = new File(plugin.getDataFolder(), "pack-assets/assets").toPath().toAbsolutePath().normalize();
+        Path file = root.resolve(key.getNamespace()).resolve("models").resolve(key.getKey() + ".json").normalize();
+        if (!file.startsWith(root)) return false;
+        try {
+            return Files.isRegularFile(file.toRealPath()) && file.toRealPath().startsWith(root.toRealPath());
+        } catch (IOException e) {
+            return false;
+        }
     }
 
     private boolean putAsset(ZipOutputStream zip, File directory, String configuredPath, String packPath, String warning)

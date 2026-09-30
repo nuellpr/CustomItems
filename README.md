@@ -55,10 +55,17 @@ Tiga hal yang perlu diketahui:
 
 ## Install
 
-1. Download `CustomItems-0.8.2.jar` dari [Releases](../../releases), taruh di folder `plugins/`
+1. Download `CustomItems-0.8.3.jar` dari [Releases](../../releases), taruh di folder `plugins/`
 2. Start server → folder `plugins/CustomItems/` tergenerate; tekstur bawaan Ruby Sword, Marble Block, admin, dan smile ikut disalin otomatis ke `textures/`
 3. Untuk server online: **wajib** set `external-url` di `config.yml` ke IP/URL publik (mis. `http://play.myserver.com:8077`) dan buka port-nya. Kalau dibiarkan kosong, plugin memakai bind IP server dan hanya berfungsi untuk pemain di mesin yang sama — URL `http://0.0.0.0:8077` tidak bisa di-download client.
 4. `/ci reload`
+
+## Perubahan 0.8.3
+
+| Perubahan | Detail |
+|---|---|
+| Import pack Oraxen | Java tool dapat mengimpor model, tekstur, tekstur animasi, dan daftar item statis dari arsip Oraxen ke folder data CustomItems. Item hasil impor dimuat terpisah dan tidak menimpa `items.yml`. |
+| Model item eksternal | `items.yml` menerima `model: namespace:path`. Aset model/tekstur di `pack-assets/assets/` digabungkan ke pack saat `/ci reload`; model item vanilla tidak ditimpa. |
 
 ## Perubahan 0.8.2
 
@@ -185,6 +192,18 @@ items:
 ```
 
 Semua field tambahan opsional. Jika tidak ada, item tetap berperilaku seperti sebelumnya. `damage`, `armor`, dan `attack-speed` adalah bonus angka tetap yang ditambahkan di atas atribut bawaan material; armor memakai slot equipment dari material dasar. Bonus atribut dicatat saat stack item dibuat, jadi setelah mengubah stat, berikan ulang item dengan `/ci give <key>`. Efek `held` hanya memeriksa tangan utama, durasinya 20–40 tick dan efek yang aktif selesai setelah item dilepas. Efek `use` dan ability `on-right-click` dipicu pada klik-kanan. `on-hit` hanya berlaku untuk serangan langsung pemain, bukan panah/proyektil. Efek potion yang lebih kuat tidak ditimpa. Nilai di luar rentang atau tipe ability/efek yang tidak dikenal memberi warning di console dan entri tersebut dilewati.
+
+Untuk model dari resource pack lain, set `model: minecraft:elitecreatures/fairy_heart_zeref_animated_weapon_set/sword` dan letakkan file JSON di `pack-assets/assets/minecraft/models/elitecreatures/...`; tekstur pasangannya di `pack-assets/assets/minecraft/textures/elitecreatures/...`. Importir Oraxen menyalin aset itu dan membuat konfigurasi item otomatis. File yang sudah ada tidak ditimpa.
+
+### Import pack Oraxen
+
+Jalankan tool Java dari repo. Ganti `--out` dengan folder data plugin di server:
+
+```powershell
+java tools/CustomItemsTools.java import-oraxen --zip "D:\MC\elitecreatures-fairy_heart_zeref_animated_weapon_set.zip" --out "D:\Server\plugins\CustomItems"
+```
+
+Tool membuat `imports/fairy_heart_zeref_animated_weapon_set.yml`, menyalin model/tekstur ke `pack-assets/assets/minecraft/`, dan menyalin ikon armor ke `textures/`. Setelah selesai, jalankan `/ci reload`; item hasil impor dapat diberikan dengan `/ci give <key>`. Importer mengambil model dan tekstur animasi, tetapi tidak menerjemahkan perilaku khusus Oraxen seperti pose tarik busur/crossbow, model shield/fishing-rod saat state berubah, armor ketika dipakai, atau furniture/hat mechanics. Item yang memakai model state khusus akan tetap memakai model statisnya.
 
 ### blocks.yml
 
@@ -325,7 +344,7 @@ Kode keluar `0` = pack lolos validasi, `1` = ada masalah, `2` = pemakaian/perint
 java tools/CustomItemsTools.java build --libraries "/path/to/paper/libraries"
 ```
 
-Butuh JDK 25 dan folder `libraries` dari server Paper 26.2 (harus berisi `paper-api` serta library dependensinya). Hasilnya di `build/libs/CustomItems-0.8.2.jar`, termasuk tekstur bawaan yang disalin otomatis ke folder data plugin pada startup pertama. Bisa juga diberikan classpath secara langsung lewat `--classpath` atau environment variable `PAPER_CLASSPATH`.
+Butuh JDK 25 dan folder `libraries` dari server Paper 26.2 (harus berisi `paper-api` serta library dependensinya). Hasilnya di `build/libs/CustomItems-0.8.3.jar`, termasuk tekstur bawaan yang disalin otomatis ke folder data plugin pada startup pertama. Bisa juga diberikan classpath secara langsung lewat `--classpath` atau environment variable `PAPER_CLASSPATH`.
 
 Untuk membuat server Paper uji terpisah, gunakan `java tools/CustomItemsTools.java setup-server --paper-jar "path/to/paper.jar"`. Metadata plugin (`plugin.yml`), konfigurasi YAML, dan aset PNG/OGG tetap memakai format yang diwajibkan Paper/resource pack; seluruh kode plugin dan alat yang bisa dieksekusi ditulis dalam Java.
 

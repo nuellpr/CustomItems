@@ -10,6 +10,7 @@ public record ItemDef(
         String key,
         Material base,
         String texture,
+        String model,
         Component name,
         List<Component> lore,
         Double damageBonus,

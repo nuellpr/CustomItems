@@ -18,6 +18,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -36,7 +37,7 @@ import javax.tools.ToolProvider;
 
 /** Small JDK-only build and maintenance tools for CustomItems. */
 public final class CustomItemsTools {
-    private static final String VERSION = "0.8.2";
+    private static final String VERSION = "0.8.3";
     private static final String[] MISSING_FONT_REFS = {
             "minecraft:include/space", "minecraft:include/default", "minecraft:include/unifont"
     };
@@ -52,6 +53,7 @@ public final class CustomItemsTools {
             Options options = new Options(args, 1);
             switch (args[0]) {
                 case "build" -> build(options);
+                case "import-oraxen" -> importOraxen(options);
                 case "generate-textures" -> generateTextures(options);
                 case "test-pack" -> testPack(options);
                 case "setup-server" -> setupServer(options);
@@ -67,6 +69,7 @@ public final class CustomItemsTools {
     private static void usage() {
         System.out.println("CustomItems Java tools (JDK 25)");
         System.out.println("  java tools/CustomItemsTools.java build --libraries <paper-libraries>");
+        System.out.println("  java tools/CustomItemsTools.java import-oraxen --zip <pack.zip> --out <CustomItems-data-folder>");
         System.out.println("  java tools/CustomItemsTools.java generate-textures [--out-dir <dir>]");
         System.out.println("  java tools/CustomItemsTools.java test-pack --pack <zip> [--config-dir <dir>]");
         System.out.println("  java tools/CustomItemsTools.java setup-server [--paper-jar <jar>] [--jar <jar>]");
@@ -223,6 +226,161 @@ public final class CustomItemsTools {
         }
         System.out.println("generated " + art.size() + " textures in " + output);
     }
+
+    private static void importOraxen(Options options) throws Exception {
+        Path archive = requiredPath(options, "zip");
+        Path output = requiredPath(options, "out");
+        Files.createDirectories(output);
+        try (ZipFile zip = new ZipFile(archive.toFile())) {
+            String configPath = zip.stream().map(ZipEntry::getName).map(name -> name.replace('\\', '/'))
+                    .filter(name -> name.matches("(?i).*/plugins/Oraxen/items/[^/]+\\.yml"))
+                    .sorted().findFirst().orElseThrow(() -> new IOException("Oraxen items/*.yml not found in " + archive));
+            ZipEntry config = zip.getEntry(configPath);
+            if (config == null) throw new IOException("Oraxen config entry not found: " + configPath);
+            String yaml;
+            try (InputStream in = zip.getInputStream(config)) {
+                yaml = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+            }
+            List<ImportedItem> items = parseOraxenItems(yaml);
+            if (items.isEmpty()) throw new IOException("no importable Oraxen items found in " + configPath);
+            String pluginPrefix = configPath.substring(0, configPath.lastIndexOf("items/"));
+            String fileName = Path.of(configPath).getFileName().toString().replaceFirst("(?i)\\.yml$", "")
+                    .replaceAll("[^a-zA-Z0-9_-]", "_") + ".yml";
+            Path importedFile = output.resolve("imports").resolve(fileName);
+            if (Files.exists(importedFile)) throw new IOException("import already exists; remove it first to replace: " + importedFile);
+            int copied = copyOraxenAssets(zip, pluginPrefix + "pack/models/", output.resolve("pack-assets/assets/minecraft/models"), ".json");
+            copied += copyOraxenAssets(zip, pluginPrefix + "pack/textures/", output.resolve("pack-assets/assets/minecraft/textures"), ".png", ".mcmeta");
+
+            Files.createDirectories(importedFile.getParent());
+            StringBuilder generated = new StringBuilder("items:\n");
+            int imported = 0;
+            for (ImportedItem item : items) {
+                String textureDestination = null;
+                if (item.model() != null) {
+                    String modelFile = pluginPrefix + "pack/models/" + item.model() + ".json";
+                    if (zip.getEntry(modelFile) == null) {
+                        System.err.println("Skipping " + item.key() + ": model missing from archive: " + modelFile);
+                        continue;
+                    }
+                } else if (item.texture() != null) {
+                    String texture = item.texture().replaceFirst("(?i)\\.png$", "");
+                    String textureEntry = pluginPrefix + "pack/textures/" + texture + ".png";
+                    ZipEntry textureFile = zip.getEntry(textureEntry);
+                    if (textureFile == null) {
+                        System.err.println("Skipping " + item.key() + ": texture missing from archive: " + textureEntry);
+                        continue;
+                    }
+                    textureDestination = "imported/oraxen/" + item.key() + ".png";
+                    copyZipEntry(zip, textureFile, output.resolve("textures").resolve(textureDestination));
+                } else continue;
+                generated.append("  ").append(item.key()).append(":\n")
+                        .append("    base: ").append(item.base()).append('\n')
+                        .append("    name: ").append(yamlString(item.name())).append('\n');
+                if (item.model() != null) {
+                    generated.append("    model: ").append(yamlString("minecraft:" + item.model())).append('\n');
+                } else {
+                    generated.append("    texture: ").append(yamlString(textureDestination)).append('\n');
+                }
+                imported++;
+            }
+            if (imported == 0) throw new IOException("no Oraxen items had model/texture assets in the archive");
+            Files.writeString(importedFile, generated, StandardCharsets.UTF_8);
+            System.out.printf("Imported %d Oraxen items and %d model/texture files to %s%n", imported, copied, output);
+            System.out.println("Run /ci reload in-game; imported item keys are available with /ci give <key>.");
+        }
+    }
+
+    private static List<ImportedItem> parseOraxenItems(String yaml) {
+        List<ImportedItem> result = new ArrayList<>();
+        String key = null, base = null, name = null, model = null, texture = null;
+        boolean readingTextures = false;
+        for (String line : yaml.split("\\R")) {
+            Matcher top = Pattern.compile("^([a-zA-Z0-9_-]+):\\s*$").matcher(line);
+            if (top.matches()) {
+                addImportedItem(result, key, base, name, model, texture);
+                key = top.group(1).toLowerCase(Locale.ROOT);
+                base = name = model = texture = null;
+                readingTextures = false;
+                continue;
+            }
+            if (key == null) continue;
+            Matcher field = Pattern.compile("^ {2}(material|displayname):\\s*(.*?)\\s*$").matcher(line);
+            if (field.matches()) {
+                if (field.group(1).equals("material")) base = unquote(field.group(2)).toUpperCase(Locale.ROOT);
+                else name = unquote(field.group(2));
+                readingTextures = false;
+                continue;
+            }
+            Matcher modelField = Pattern.compile("^ {4}model:\\s*(.*?)\\s*$").matcher(line);
+            if (modelField.matches()) {
+                model = unquote(modelField.group(1));
+                readingTextures = false;
+                continue;
+            }
+            if (line.matches("^ {4}textures:\\s*$")) {
+                readingTextures = true;
+                continue;
+            }
+            Matcher textureField = Pattern.compile("^ {6}-\\s*(.*?)\\s*$").matcher(line);
+            if (readingTextures && texture == null && textureField.matches()) texture = unquote(textureField.group(1));
+        }
+        addImportedItem(result, key, base, name, model, texture);
+        return result;
+    }
+
+    private static void addImportedItem(List<ImportedItem> items, String key, String base, String name,
+                                        String model, String texture) {
+        if (key == null || base == null || !base.matches("[A-Z0-9_]+")) return;
+        if (model != null && !safeResourcePath(model)) model = null;
+        if (texture != null && !safeResourcePath(texture)) texture = null;
+        if (model != null || texture != null) items.add(new ImportedItem(key, base,
+                name == null || name.isBlank() ? key : name, model, texture));
+    }
+
+    private static boolean safeResourcePath(String value) {
+        Path path = Path.of(value.replace('/', java.io.File.separatorChar)).normalize();
+        String normalized = path.toString().replace('\\', '/');
+        return !path.isAbsolute() && !path.startsWith("..") && normalized.equals(value)
+                && value.matches("[a-zA-Z0-9_./-]+")
+                && !value.contains("//");
+    }
+
+    private static String unquote(String value) {
+        String text = value.trim();
+        if (text.length() >= 2 && ((text.startsWith("\"") && text.endsWith("\""))
+                || (text.startsWith("'") && text.endsWith("'")))) return text.substring(1, text.length() - 1);
+        return text;
+    }
+
+    private static String yamlString(String value) {
+        return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + "\"";
+    }
+
+    private static int copyOraxenAssets(ZipFile zip, String prefix, Path output, String... suffixes) throws IOException {
+        int copied = 0;
+        for (ZipEntry entry : zip.stream().sorted(Comparator.comparing(ZipEntry::getName)).toList()) {
+            String entryName = entry.getName().replace('\\', '/');
+            if (entry.isDirectory() || !entryName.startsWith(prefix)) continue;
+            String relative = entryName.substring(prefix.length());
+            String lower = relative.toLowerCase(Locale.ROOT);
+            if (relative.isBlank() || Arrays.stream(suffixes).noneMatch(lower::endsWith) || !safeResourcePath(relative)) continue;
+            Path destination = output.resolve(relative.replace('/', java.io.File.separatorChar)).normalize();
+            if (!destination.startsWith(output.normalize())) continue;
+            if (copyZipEntry(zip, entry, destination)) copied++;
+        }
+        return copied;
+    }
+
+    private static boolean copyZipEntry(ZipFile zip, ZipEntry entry, Path destination) throws IOException {
+        if (Files.exists(destination)) return false;
+        Files.createDirectories(destination.getParent());
+        try (InputStream in = zip.getInputStream(entry)) {
+            Files.copy(in, destination);
+        }
+        return true;
+    }
+
+    private record ImportedItem(String key, String base, String name, String model, String texture) {}
 
     private static int rgb(int r, int g, int b) { return 0xff000000 | (r << 16) | (g << 8) | b; }
 
