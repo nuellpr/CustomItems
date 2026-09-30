@@ -84,7 +84,7 @@ Pada migrasi dari 0.8.0, jangan hapus `block-states.yml` atau `placed-blocks.txt
 | Custom block tidak bisa di-break | Block identity disimpan ke `TileState`, tapi noteblock **tidak punya block entity** — PDC tidak pernah tersimpan, jadi block tidak dikenali dan drop item gagal | Identity dibaca dari blockstate `instrument+note` |
 | Pack URL `http://0.0.0.0:8077` | Client tidak bisa mengunduh pack | `0.0.0.0`/`::` diganti loopback + warning, trailing slash dan `/pack.zip` ganda dinormalkan |
 | `/ci menu` crash | `createInventory` melempar error di atas 54 slot saat item+block > 54 | Ukuran dibatasi 54 + warning |
-| Build gagal tanpa Gradle | `gradle` tidak ada di PATH dan repo tidak punya wrapper | Lihat "Build dari source" — bisa pakai `javac` langsung |
+| Build langsung dengan Java | Build sebelumnya memerlukan Gradle terpasang | Alat Java dari JDK mengompilasi dan mengemas plugin tanpa Gradle |
 
 ## Perubahan 0.8.0 (custom block sungguhan)
 
@@ -95,7 +95,7 @@ Pada migrasi dari 0.8.0, jangan hapus `block-states.yml` atau `placed-blocks.txt
 | `powered=true` ikut dipetakan | Tiap custom block dipetakan untuk **kedua** nilai `powered`. Kalau hanya `powered=false`, block yang di-*power* redstone diam-diam jatuh ke model noteblock vanilla |
 | 4 nilai `trumpet` ditambahkan | `Blocks.ALL_INSTRUMENTS` punya 27 nilai yang cocok dengan blockstate noteblock di 26.2. `trumpet`, `trumpet_exposed`, `trumpet_oxidized`, `trumpet_weathered` sebelumnya hilang, sehingga `stateName()` jatuh ke `"harp"` dan salah melaporkan blok |
 | Batas 250 block | Melewati 250 block (10 instrument × 25 note) membuat `instrument`/`note` berputar dan menimpa identitas blok sebelumnya secara diam-diam. Sekarang plugin berhenti memuat + memberi warning, seperti yang sudah dilakukan `Ranks`/`Emojis` untuk glyph |
-| Asersi `Test-Pack.ps1` dibalik | Sebelumnya assert "blockstate harus tetap vanilla". Sekarang assert sebaliknya: variant `""` **wajib ada**, harus ada key `instrument=`, tiap key harus berbentuk `instrument=,note=,powered=`, tiap state harus punya `powered=false` **dan** `powered=true`, dan model yang dirujuk harus benar-benar ada di dalam pack |
+| Validasi resource pack | Variant `""` **wajib ada**, tiap key harus berbentuk `instrument=,note=,powered=`, tiap state harus punya `powered=false` **dan** `powered=true`, dan model yang dirujuk harus benar-benar ada di dalam pack |
 
 ## Perubahan 0.7.0 (kemampuan CLI & GUI)
 
@@ -105,9 +105,9 @@ Pada migrasi dari 0.8.0, jangan hapus `block-states.yml` atau `placed-blocks.txt
 | **`/ci list`** | Menampilkan semua key yang termuat: item, block, mob, sound, rank, emoji |
 | **GUI paging** | Dulu `/ci menu` memotong di 54 entry. Sekarang 45 per halaman dengan tombol `<` `>`; inventory holder jadi per-pemain supaya dua player tidak saling menimpa halaman |
 | **Custom mob bertahan setelah restart** | Tipe dan posisi tersimpan di world, tapi nama/HP/speed hanya ada di memori — setelah restart mob custom jadi zombie biasa. `ChunkLoadEvent` membaca tag PDC `cmob` dan menerapkan ulang atribut. Key yang sudah dihapus dari `mobs.yml` dibiarkan apa adanya |
-| **`Test-Pack.ps1` cek glyph** | Menandai `FAIL` kalau ada codepoint di luar U+E000–U+E1FF (artinya >256 rank/emoji dan glyph bocor ke CJK) atau ada codepoint duplikat (dua entry merebut satu slot) |
+| Validator resource pack cek glyph | Menandai `FAIL` kalau ada codepoint di luar U+E000–U+E1FF (artinya >256 rank/emoji dan glyph bocor ke CJK) atau ada codepoint duplikat (dua entry merebut satu slot) |
 
-> Batas 256 per kategori ditegakkan di loader (`Ranks.MAX_GLYPHS` / `Emojis.MAX_GLYPHS`), jadi pack yang lolos validasi memang aman. Cek di `Test-Pack.ps1` menangkap pack yang dibangun versi lama atau oleh skrip lain.
+> Batas 256 per kategori ditegakkan di loader (`Ranks.MAX_GLYPHS` / `Emojis.MAX_GLYPHS`), jadi pack yang lolos validasi memang aman. Validator Java menangkap pack yang dibangun versi lama atau oleh alat lain.
 
 ## Perubahan 0.6.0 (fix race, config, dan chat)
 
@@ -243,43 +243,35 @@ Tidak ada permission per item. Semua isi plugin bersifat publik: siapa pun yang 
 
 ## Tools
 
-Ada di `tools/`, semuanya PowerShell dan tanpa dependency.
+Semua alat bantu ada di `tools/CustomItemsTools.java` dan memakai JDK saja.
 
 | Tool | Fungsi |
 |---|---|
-| `Test-Pack.ps1` | **Validasi pack sebelum pemain mengunduhnya.** Menangkap 3 kegagalan senyap: varian noteblock kurang (block tak terlihat), `font/default.json` kehilangan referensi vanilla (teks jadi kotak), dan texture yang dipakai config tapi tidak ikut ter-pack |
-| `GenerateTextures.ps1` | Bikin placeholder pixel-art (`ruby_sword`, `marble_block`, `smile`) sesuai gaya rank tag yang ada |
-| `Setup-TestServer.ps1` | Siapkan server Paper sekali-pakai di folder terpisah untuk uji end-to-end. **Tidak menyentuh server produksi** |
-| `rcon.ps1` | Client RCON minimal untuk menjalankan perintah `/ci` secara scripted |
+| `test-pack` | **Validasi pack sebelum pemain mengunduhnya.** Mengecek varian noteblock, glyph vanilla, model, tekstur, dan kecocokan konfigurasi |
+| `generate-textures` | Bikin placeholder pixel-art (`ruby_sword`, `marble_block`, `smile`) sesuai gaya rank tag yang ada |
+| `setup-server` | Siapkan server Paper sekali-pakai di folder terpisah. **Tidak menyentuh server produksi** |
+| `rcon` | Client RCON minimal untuk menjalankan perintah `/ci` |
+| `build` | Kompilasi plugin dan buat JAR release dengan compiler dan API JDK |
 
-Cek pack yang sedang jalan:
+Jalankan dari root repository:
 
-```powershell
-.\tools\Test-Pack.ps1 -Pack "..\..\plugins\CustomItems\pack.zip" -ConfigDir "..\..\plugins\CustomItems"
+```bash
+java tools/CustomItemsTools.java generate-textures
+java tools/CustomItemsTools.java test-pack --pack "../../plugins/CustomItems/pack.zip" --config-dir "../../plugins/CustomItems"
+java tools/CustomItemsTools.java rcon --password test123 --command "ci reload"
 ```
 
-Kode keluar `0` = aman dibagikan ke pemain, `1` = ada masalah. Jalankan ini setelah `/ci reload` dan sebelum mengumumkan item baru ke pemain.
+Kode keluar `0` = pack lolos validasi, `1` = ada masalah, `2` = pemakaian/perintah gagal. Jalankan validator setelah `/ci reload` dan sebelum mengumumkan item baru ke pemain.
 
 ## Build dari source
 
 ```bash
-gradle build
+java tools/CustomItemsTools.java build --libraries "/path/to/paper/libraries"
 ```
 
-Butuh Gradle 9.x + Java 25. Hasil di `build/libs/CustomItems-0.8.1.jar`.
+Butuh JDK 25 dan folder `libraries` dari server Paper 26.2 (harus berisi `paper-api` serta library dependensinya). Hasilnya di `build/libs/CustomItems-0.8.1.jar`. Bisa juga diberikan classpath secara langsung lewat `--classpath` atau environment variable `PAPER_CLASSPATH`.
 
-Kalau Gradle tidak terpasang (repo ini belum punya wrapper), bisa kompilasi langsung dengan JDK 25:
-
-```bash
-javac -encoding UTF-8 --release 25 -cp paper-api.jar -d build/classes $(find src/main/java -name '*.java')
-```
-
-`paper-api` 26.2 bisa diambil dari `libraries/io/papermc/paper/paper-api/...` milik server Paper, dari cache Gradle, atau dari `https://repo.papermc.io/repository/maven-public/` (versi `26.2.build.129-stable`).
-
-Kompilasi butuh `paper-api.jar` **plus** dependency-nya di classpath: `org.jetbrains:annotations`,
-`com.google.guava:guava` (dipakai `Material.getItemAttributes`), dan library adventure dari
-`META-INF/libraries/` di dalam `paper-server.jar`. Tanpa `guava`/`annotations` javac akan
-gagal dengan "cannot find symbol" meskipun paper-api-nya benar.
+Untuk membuat server Paper uji terpisah, gunakan `java tools/CustomItemsTools.java setup-server --paper-jar "path/to/paper.jar"`. Metadata plugin (`plugin.yml`), konfigurasi YAML, dan aset PNG/OGG tetap memakai format yang diwajibkan Paper/resource pack; seluruh kode plugin dan alat yang bisa dieksekusi ditulis dalam Java.
 
 ## Catatan teknis
 
