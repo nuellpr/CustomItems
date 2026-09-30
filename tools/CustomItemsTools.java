@@ -373,7 +373,8 @@ public final class CustomItemsTools {
                         report.skip(item.key() + ": duplicate key across ItemsAdder namespaces/configs");
                         continue;
                     }
-                    Path modelFile = importedModelPath(output.resolve("pack-assets/assets"), item.model());
+                    Path modelFile = item.model() == null ? null
+                            : importedModelPath(output.resolve("pack-assets/assets"), item.model());
                     String texturePath = item.texture() == null ? null : withPngExtension(item.texture());
                     String textureFile = texturePath == null ? null : output.resolve("pack-assets/assets")
                             .resolve(data.namespace()).resolve("textures").resolve(texturePath).normalize().toString();
