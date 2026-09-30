@@ -117,6 +117,7 @@ public final class CustomItemsTools {
         try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(jar))) {
             addFiles(out, classes, "", null);
             addFiles(out, root.resolve("src/main/resources"), "", version);
+            addFiles(out, root.resolve("textures"), "textures/", null);
         }
         System.out.println("built " + jar + " (" + sources.size() + " Java sources)");
     }

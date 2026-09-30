@@ -2,7 +2,13 @@ package com.chatbiasa.customitems;
 
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.io.File;
+import java.util.List;
+
 public final class CustomItemsPlugin extends JavaPlugin {
+
+    private static final List<String> DEFAULT_TEXTURES = List.of(
+            "ruby_sword.png", "marble_block.png", "admin.png", "smile.png");
 
     private Items items;
     private Blocks blocks;
@@ -20,6 +26,7 @@ public final class CustomItemsPlugin extends JavaPlugin {
     @Override
     public void onEnable() {
         saveDefaultConfig();
+        installDefaultTextures();
         items = new Items(this);
         blocks = new Blocks(this);
         mobs = new Mobs(this);
@@ -51,6 +58,23 @@ public final class CustomItemsPlugin extends JavaPlugin {
         getCommand("ci").setExecutor(new GiveCommand(this));
         blocks.startSaveTask();
         JoinListener.migrateOnline(this);
+    }
+
+    private void installDefaultTextures() {
+        File textureDirectory = new File(getDataFolder(), "textures");
+        for (String texture : DEFAULT_TEXTURES) {
+            File target = new File(textureDirectory, texture);
+            if (target.isFile()) continue;
+            if (target.exists()) {
+                getLogger().warning("Default texture path is not a file: " + target.getName());
+                continue;
+            }
+            try {
+                saveResource("textures/" + texture, false);
+            } catch (IllegalArgumentException e) {
+                getLogger().warning("Could not install default texture " + texture + ": " + e.getMessage());
+            }
+        }
     }
 
     @Override

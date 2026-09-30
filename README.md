@@ -56,7 +56,7 @@ Tiga hal yang perlu diketahui:
 ## Install
 
 1. Download `CustomItems-0.8.1.jar` dari [Releases](../../releases), taruh di folder `plugins/`
-2. Start server → folder `plugins/CustomItems/` tergenerate
+2. Start server → folder `plugins/CustomItems/` tergenerate; tekstur bawaan Ruby Sword, Marble Block, admin, dan smile ikut disalin otomatis ke `textures/`
 3. Untuk server online: **wajib** set `external-url` di `config.yml` ke IP/URL publik (mis. `http://play.myserver.com:8077`) dan buka port-nya. Kalau dibiarkan kosong, plugin memakai bind IP server dan hanya berfungsi untuk pemain di mesin yang sama — URL `http://0.0.0.0:8077` tidak bisa di-download client.
 4. `/ci reload`
 
@@ -269,7 +269,7 @@ sounds:
 
 File .ogg ditaruh di `plugins/CustomItems/sounds/`, mainkan via `/ci play fanfare`.
 
-Texture PNG ditaruh di `plugins/CustomItems/textures/`, lalu `/ci reload` — pack.zip dibangun ulang otomatis.
+Tekstur bawaan sudah disertakan di JAR. Texture PNG custom ditaruh di `plugins/CustomItems/textures/`, lalu `/ci reload` — pack.zip dibangun ulang otomatis. File yang sudah ada tidak ditimpa saat startup.
 
 ## Perintah
 
@@ -317,7 +317,7 @@ Kode keluar `0` = pack lolos validasi, `1` = ada masalah, `2` = pemakaian/perint
 java tools/CustomItemsTools.java build --libraries "/path/to/paper/libraries"
 ```
 
-Butuh JDK 25 dan folder `libraries` dari server Paper 26.2 (harus berisi `paper-api` serta library dependensinya). Hasilnya di `build/libs/CustomItems-0.8.1.jar`. Bisa juga diberikan classpath secara langsung lewat `--classpath` atau environment variable `PAPER_CLASSPATH`.
+Butuh JDK 25 dan folder `libraries` dari server Paper 26.2 (harus berisi `paper-api` serta library dependensinya). Hasilnya di `build/libs/CustomItems-0.8.1.jar`, termasuk tekstur bawaan yang disalin otomatis ke folder data plugin pada startup pertama. Bisa juga diberikan classpath secara langsung lewat `--classpath` atau environment variable `PAPER_CLASSPATH`.
 
 Untuk membuat server Paper uji terpisah, gunakan `java tools/CustomItemsTools.java setup-server --paper-jar "path/to/paper.jar"`. Metadata plugin (`plugin.yml`), konfigurasi YAML, dan aset PNG/OGG tetap memakai format yang diwajibkan Paper/resource pack; seluruh kode plugin dan alat yang bisa dieksekusi ditulis dalam Java.
 
