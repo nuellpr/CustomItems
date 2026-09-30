@@ -2,15 +2,17 @@ package com.chatbiasa.customitems;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.AtomicMoveNotSupportedException;
+import java.nio.file.StandardCopyOption;
 import java.security.MessageDigest;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
+import org.bukkit.NamespacedKey;
 
 public final class PackBuilder {
 
@@ -26,43 +28,30 @@ public final class PackBuilder {
     public void build() throws Exception {
         File textures = new File(plugin.getDataFolder(), "textures");
         if (!textures.exists()) textures.mkdirs();
-
-        // group items by base material so one item model file holds all string-CMD cases
-        Map<org.bukkit.Material, List<ItemDef>> byBase = new LinkedHashMap<>();
-        for (ItemDef def : plugin.items().all()) {
-            byBase.computeIfAbsent(def.base(), k -> new ArrayList<>()).add(def);
-        }
-
+        String namespace = new NamespacedKey(plugin, "pack").getNamespace();
         File out = new File(plugin.getDataFolder(), "pack.zip");
-        try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(out.toPath()))) {
+        File temp = new File(plugin.getDataFolder(), "pack.zip.tmp");
+        try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(temp.toPath()))) {
             // 1.21.9+ reads min_format/max_format; pack_format stays for older clients.
             int fmt = plugin.getConfig().getInt("pack-format", 88);
             put(zip, "pack.mcmeta", """
                     {"pack":{"pack_format":%d,"min_format":%d,"max_format":%d,"description":"CustomItems pack"}}""".formatted(
                     fmt, fmt, fmt));
-            for (List<ItemDef> defs : byBase.values()) {
-                String base = defs.get(0).base().getKey().getKey();
-                StringBuilder cases = new StringBuilder();
-                for (ItemDef def : defs) {
-                    if (!cases.isEmpty()) cases.append(',');
-                    cases.append("{\"model\":{\"type\":\"minecraft:model\",\"model\":\"minecraft:item/")
-                            .append(def.key()).append("\"},\"when\":\"").append(def.key()).append("\"}");
-                }
-                put(zip, "assets/minecraft/items/" + base + ".json", """
-                        {"model":{"type":"minecraft:select","property":"minecraft:custom_model_data","cases":[%s],"fallback":{"type":"minecraft:model","model":"minecraft:item/%s"}}}"""
-                        .formatted(cases, base));
-                for (ItemDef def : defs) {
-                    String parent = def.base().getKey().getKey().matches(".*(sword|pickaxe|axe|shovel|hoe|bow|trident)")
-                            ? "minecraft:item/handheld" : "minecraft:item/generated";
-                    put(zip, "assets/minecraft/models/item/" + def.key() + ".json",
-                            "{\"parent\":\"" + parent + "\",\"textures\":{\"layer0\":\"minecraft:item/" + def.key() + "\"}}");
-                    File png = new File(textures, def.texture());
-                    if (png.isFile()) {
-                        putBytes(zip, "assets/minecraft/textures/item/" + def.key() + ".png", Files.readAllBytes(png.toPath()));
-                    } else {
-                        plugin.getLogger().warning("Missing texture for '" + def.key() + "': " + png.getPath());
-                    }
-                }
+            // Give custom stacks their own item-model IDs. This avoids replacing
+            // assets/minecraft/items/<base>.json, which would change the model for every vanilla
+            // stack of that material (including state-driven models such as bows and crossbows).
+            for (ItemDef def : plugin.items().all()) {
+                String base = def.base().getKey().getKey();
+                String parent = base.matches(".*(sword|pickaxe|axe|shovel|hoe|bow|trident)")
+                        ? "minecraft:item/handheld" : "minecraft:item/generated";
+                put(zip, "assets/" + namespace + "/items/" + def.key() + ".json",
+                        "{\"model\":{\"type\":\"minecraft:model\",\"model\":\"" + namespace
+                                + ":item/" + def.key() + "\"}}");
+                put(zip, "assets/" + namespace + "/models/item/" + def.key() + ".json",
+                        "{\"parent\":\"" + parent + "\",\"textures\":{\"layer0\":\"" + namespace
+                                + ":item/" + def.key() + "\"}}");
+                putAsset(zip, textures, def.texture(), "assets/" + namespace + "/textures/item/" + def.key() + ".png",
+                        "Missing or unsafe texture for '" + def.key() + "': " + def.texture());
             }
             // Custom blocks are note blocks whose instrument+note blockstate selects our own model --
             // the same mechanism Oraxen and ItemsAdder use. A note block has no block entity, so the
@@ -76,7 +65,7 @@ public final class PackBuilder {
                 List<Blocks.BlockDef> blocks = plugin.blocks().all();
                 StringBuilder variants = new StringBuilder("\"\":{\"model\":\"minecraft:block/note_block\"}");
                 for (Blocks.BlockDef def : blocks) {
-                    String model = "minecraft:block/cblock_" + def.key();
+                    String model = namespace + ":block/cblock_" + def.key();
                     // both powered values, otherwise a redstone-powered custom block silently
                     // falls back to the vanilla noteblock model
                     for (String powered : new String[]{"false", "true"}) {
@@ -88,27 +77,18 @@ public final class PackBuilder {
                 }
                 put(zip, "assets/minecraft/blockstates/note_block.json",
                         "{\"variants\":{" + variants + "}}");
-                StringBuilder blockCases = new StringBuilder();
-                for (Blocks.BlockDef def : blocks) {
-                    if (!blockCases.isEmpty()) blockCases.append(',');
-                    blockCases.append("{\"model\":{\"type\":\"minecraft:model\",\"model\":\"minecraft:item/")
-                            .append(def.key()).append("\"},\"when\":\"").append(def.key()).append("\"}");
-                }
-                put(zip, "assets/minecraft/items/note_block.json", """
-                        {"model":{"type":"minecraft:select","property":"minecraft:custom_model_data","cases":[%s],"fallback":{"type":"minecraft:model","model":"minecraft:item/note_block"}}}"""
-                        .formatted(blockCases));
                 for (Blocks.BlockDef def : blocks) {
                     String id = "cblock_" + def.key();
-                    put(zip, "assets/minecraft/models/block/" + id + ".json", """
-                            {"parent":"minecraft:block/cube_all","textures":{"all":"minecraft:block/%s"}}""".formatted(id));
-                    put(zip, "assets/minecraft/models/item/" + def.key() + ".json", """
-                            {"parent":"minecraft:block/%s"}""".formatted(id));
-                    File png = new File(textures, def.texture());
-                    if (png.isFile()) {
-                        putBytes(zip, "assets/minecraft/textures/block/" + id + ".png", Files.readAllBytes(png.toPath()));
-                    } else {
-                        plugin.getLogger().warning("Missing texture for '" + def.key() + "': " + png.getPath());
-                    }
+                    put(zip, "assets/" + namespace + "/items/block/" + def.key() + ".json",
+                            "{\"model\":{\"type\":\"minecraft:model\",\"model\":\"" + namespace
+                                    + ":item/block/" + def.key() + "\"}}");
+                    put(zip, "assets/" + namespace + "/models/block/" + id + ".json", """
+                            {"parent":"minecraft:block/cube_all","textures":{"all":"%s:block/%s"}}"""
+                            .formatted(namespace, id));
+                    put(zip, "assets/" + namespace + "/models/item/block/" + def.key() + ".json", """
+                            {"parent":"%s:block/%s"}""".formatted(namespace, id));
+                    putAsset(zip, textures, def.texture(), "assets/" + namespace + "/textures/block/" + id + ".png",
+                            "Missing or unsafe texture for '" + def.key() + "': " + def.texture());
                 }
             }
             // rank tags + emojis: bitmap font glyphs, merged additively into the default font.
@@ -117,39 +97,27 @@ public final class PackBuilder {
             // emitted when the texture is actually packed: referencing a file the client cannot
             // find is a dangling reference, and the missing rank shows as one tofu box instead.
             StringBuilder providers = new StringBuilder();
-            int gi = 0;
             for (Ranks.RankDef def : plugin.ranks().all()) {
-                File png = new File(textures, def.texture());
-                if (png.isFile()) {
+                if (putAsset(zip, textures, def.texture(), "assets/minecraft/textures/font/rank_" + def.key() + ".png",
+                        "Missing or unsafe texture for rank '" + def.key() + "': " + def.texture()
+                                + " - this rank will show as a blank box in chat")) {
                     if (!providers.isEmpty()) providers.append(',');
                     providers.append("{\"type\":\"bitmap\",\"file\":\"minecraft:font/rank_")
                             .append(def.key()).append(".png\",\"ascent\":").append(def.ascent())
                             .append(",\"height\":").append(def.ascent())
-                            .append(",\"chars\":[\"\\u").append(String.format("%04X", 0xE000 + gi)).append("\"]}");
-                    putBytes(zip, "assets/minecraft/textures/font/rank_" + def.key() + ".png",
-                            Files.readAllBytes(png.toPath()));
-                } else {
-                    plugin.getLogger().warning("Missing texture for rank '" + def.key() + "': " + png.getPath()
-                            + " - this rank will show as a blank box in chat");
+                            .append(",\"chars\":[\"\\u").append(String.format("%04X", 0xE000 + def.glyphIndex())).append("\"]}");
                 }
-                gi++;
             }
-            int ei = 0;
             for (Emojis.EmojiDef def : plugin.emojis().all()) {
-                File png = new File(textures, def.texture());
-                if (png.isFile()) {
+                if (putAsset(zip, textures, def.texture(), "assets/minecraft/textures/font/emoji_" + def.key() + ".png",
+                        "Missing or unsafe texture for emoji '" + def.key() + "': " + def.texture()
+                                + " - :" + def.key() + ": will not render")) {
                     if (!providers.isEmpty()) providers.append(',');
                     providers.append("{\"type\":\"bitmap\",\"file\":\"minecraft:font/emoji_")
                             .append(def.key()).append(".png\",\"ascent\":").append(def.ascent())
                             .append(",\"height\":").append(def.ascent())
-                            .append(",\"chars\":[\"\\u").append(String.format("%04X", 0xE100 + ei)).append("\"]}");
-                    putBytes(zip, "assets/minecraft/textures/font/emoji_" + def.key() + ".png",
-                            Files.readAllBytes(png.toPath()));
-                } else {
-                    plugin.getLogger().warning("Missing texture for emoji '" + def.key() + "': " + png.getPath()
-                            + " - :" + def.key() + ": will not render");
+                            .append(",\"chars\":[\"\\u").append(String.format("%04X", 0xE100 + def.glyphIndex())).append("\"]}");
                 }
-                ei++;
             }
             if (!providers.isEmpty()) {
                 // A pack REPLACES font/default.json outright — overlays do NOT merge JSON files.
@@ -171,28 +139,74 @@ public final class PackBuilder {
                     soundsJson.append("\"custom.").append(def.key())
                             .append("\":{\"sounds\":[\"custom/").append(def.key())
                             .append("\"],\"category\":\"master\"}");
-                    File ogg = new File(sndDir, def.ogg());
-                    if (ogg.isFile()) {
-                        putBytes(zip, "assets/minecraft/sounds/custom/" + def.key() + ".ogg", Files.readAllBytes(ogg.toPath()));
-                    } else {
-                        plugin.getLogger().warning("Missing sound '" + def.key() + "': " + ogg.getPath());
-                    }
+                    putAsset(zip, sndDir, def.ogg(), "assets/minecraft/sounds/custom/" + def.key() + ".ogg",
+                            "Missing or unsafe sound '" + def.key() + "': " + def.ogg());
                 }
                 put(zip, "assets/minecraft/sounds.json", "{" + soundsJson + "}");
             }
         }
+        MessageDigest digest = MessageDigest.getInstance("SHA-1");
+        try (InputStream input = Files.newInputStream(temp.toPath())) {
+            byte[] buffer = new byte[8192];
+            int length;
+            while ((length = input.read(buffer)) != -1) digest.update(buffer, 0, length);
+        }
+        byte[] newSha1 = digest.digest();
+        try {
+            Files.move(temp.toPath(), out.toPath(), StandardCopyOption.REPLACE_EXISTING,
+                    StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException e) {
+            Files.move(temp.toPath(), out.toPath(), StandardCopyOption.REPLACE_EXISTING);
+        }
         packFile = out;
-        sha1 = MessageDigest.getInstance("SHA-1").digest(Files.readAllBytes(out.toPath()));
+        sha1 = newSha1;
         plugin.getLogger().info("Resource pack built: " + out.getPath());
     }
 
     private static void put(ZipOutputStream zip, String path, String content) throws IOException {
-        putBytes(zip, path, content.getBytes(StandardCharsets.UTF_8));
+        zip.putNextEntry(new ZipEntry(path));
+        zip.write(content.getBytes(StandardCharsets.UTF_8));
+        zip.closeEntry();
     }
 
-    private static void putBytes(ZipOutputStream zip, String path, byte[] bytes) throws IOException {
+    private static void putFile(ZipOutputStream zip, String path, File file) throws IOException {
         zip.putNextEntry(new ZipEntry(path));
-        zip.write(bytes);
+        try (InputStream input = Files.newInputStream(file.toPath())) {
+            input.transferTo(zip);
+        }
         zip.closeEntry();
+    }
+
+    private boolean putAsset(ZipOutputStream zip, File directory, String configuredPath, String packPath, String warning)
+            throws IOException {
+        File file = sourceFile(directory, configuredPath);
+        if (file == null) {
+            plugin.getLogger().warning(warning);
+            return false;
+        }
+        putFile(zip, packPath, file);
+        return true;
+    }
+
+    /** Read only files stored inside the configured asset directory, including through symlinks. */
+    private File sourceFile(File directory, String configuredPath) {
+        if (configuredPath == null || configuredPath.isBlank()) return null;
+        Path root = directory.toPath().toAbsolutePath().normalize();
+        Path candidate = root.resolve(configuredPath).normalize();
+        if (!candidate.startsWith(root)) {
+            plugin.getLogger().warning("Ignoring asset path outside " + directory.getName() + ": " + configuredPath);
+            return null;
+        }
+        try {
+            Path realRoot = root.toRealPath();
+            Path realCandidate = candidate.toRealPath();
+            if (!realCandidate.startsWith(realRoot) || !Files.isRegularFile(realCandidate)) {
+                plugin.getLogger().warning("Ignoring asset path outside " + directory.getName() + ": " + configuredPath);
+                return null;
+            }
+            return realCandidate.toFile();
+        } catch (IOException e) {
+            return null;
+        }
     }
 }

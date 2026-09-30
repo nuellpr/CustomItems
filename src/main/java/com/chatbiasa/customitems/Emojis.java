@@ -6,11 +6,12 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 public final class Emojis {
 
-    public record EmojiDef(String key, String texture, int ascent) {}
+    public record EmojiDef(String key, String texture, int ascent, int glyphIndex) {}
 
     /** U+E100..U+E1FF is 256 codepoints; same overflow guard as Ranks.MAX_GLYPHS. */
     public static final int MAX_GLYPHS = 256;
@@ -35,9 +36,18 @@ public final class Emojis {
                             + " emojis are loaded; '" + key + "' and later ones have no free glyph.");
                     break;
                 }
+                String normalized = key.toLowerCase(Locale.ROOT);
+                if (!normalized.matches("[a-z0-9_-]+") || next.containsKey(normalized)) {
+                    plugin.getLogger().warning("emojis.yml: invalid or duplicate emoji key '" + key + "'");
+                    continue;
+                }
                 String tex = yml.getString("emojis." + key + ".texture", key + ".png");
                 int ascent = yml.getInt("emojis." + key + ".ascent", 8);
-                next.put(key.toLowerCase(), new EmojiDef(key.toLowerCase(), tex, ascent));
+                if (ascent < 1 || ascent > 512) {
+                    plugin.getLogger().warning("emojis.yml: ascent for '" + key + "' must be between 1 and 512");
+                    continue;
+                }
+                next.put(normalized, new EmojiDef(normalized, tex, ascent, next.size()));
             }
         }
         emojis = next;
@@ -50,16 +60,11 @@ public final class Emojis {
 
     /** emoji lookup by key for :name: replacement */
     public EmojiDef get(String key) {
-        return emojis.get(key.toLowerCase());
+        return key == null ? null : emojis.get(key.toLowerCase(Locale.ROOT));
     }
 
     /** chat glyph char, assigned in file order from a range above the rank tags */
     public String glyph(EmojiDef def) {
-        int i = 0;
-        for (EmojiDef d : emojis.values()) {
-            if (d == def) break;
-            i++;
-        }
-        return String.valueOf((char) (0xE100 + i));
+        return String.valueOf((char) (0xE100 + def.glyphIndex()));
     }
 }

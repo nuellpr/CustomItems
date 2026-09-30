@@ -55,10 +55,25 @@ Tiga hal yang perlu diketahui:
 
 ## Install
 
-1. Download `CustomItems-0.8.0.jar` dari [Releases](../../releases), taruh di folder `plugins/`
+1. Download `CustomItems-0.8.1.jar` dari [Releases](../../releases), taruh di folder `plugins/`
 2. Start server → folder `plugins/CustomItems/` tergenerate
 3. Untuk server online: **wajib** set `external-url` di `config.yml` ke IP/URL publik (mis. `http://play.myserver.com:8077`) dan buka port-nya. Kalau dibiarkan kosong, plugin memakai bind IP server dan hanya berfungsi untuk pemain di mesin yang sama — URL `http://0.0.0.0:8077` tidak bisa di-download client.
 4. `/ci reload`
+
+## Perubahan 0.8.1 (stabilitas dan kompatibilitas)
+
+| Perubahan | Detail |
+|---|---|
+| Model item custom terpisah dari item vanilla | Item custom memakai komponen `item_model` dan aset di namespace plugin. Pack tidak lagi mengganti `assets/minecraft/items/<material>.json`, jadi model vanilla untuk item lain dengan material yang sama tetap utuh. Item lama di inventory pemain, ender chest, container yang dibuka, dan item drop dimigrasikan otomatis saat ditemukan. |
+| Identitas custom block stabil | Plugin membuat `block-states.yml` saat pertama kali berjalan. Alokasi awal mengikuti urutan lama agar dunia 0.8.0 tetap cocok; penambahan, penghapusan, dan pengurutan ulang `blocks.yml` berikutnya tidak menggeser state blok yang sudah ada. ID milik key yang dihapus tetap dicadangkan. |
+| Proteksi custom block | Break yang dibatalkan plugin proteksi tidak menghasilkan drop custom. Custom block juga tidak dapat dipindahkan piston atau dihancurkan ledakan, agar pencatatan lokasinya tidak lepas dari blok. |
+| Penyimpanan block dibatch dan atomik | Perubahan lokasi digabung, ditulis maksimal setiap 5 detik dan saat plugin berhenti. File sementara lalu dipindah agar restart/crash tidak meninggalkan file setengah tertulis. |
+| Reload dan unduhan resource pack | `/ci reload` menerapkan perubahan port dan `external-url`. Server mengirim ZIP secara streaming dan menghentikan executor saat plugin dimatikan. |
+| Chat dan GUI | Pesan emoji tanpa rank tetap memakai renderer chat sebelumnya. Klik shift/double-click dan drag tidak bisa memasukkan item sembarang ke slot menu untuk diduplikasi. |
+| Validasi konfigurasi dan command | Key tidak aman/duplikat dan nilai mob/suara tidak valid diabaikan saat load. `/ci` menolak subcommand yang tidak dikenal; item yang tidak muat dari `/ci give` dijatuhkan di dekat penerima. |
+| Pembacaan aset | File texture dan OGG hanya dimasukkan jika berada di dalam direktori aset plugin, termasuk pemeriksaan symlink. Glyph rank/emoji tetap terikat ke indeksnya selama chat yang sedang diproses ketika `/ci reload` berlangsung. |
+
+Pada migrasi dari 0.8.0, jangan hapus `block-states.yml` atau `placed-blocks.txt`. File pertama menjaga pasangan state lama; file kedua membedakan custom block dari noteblock vanilla. Jika registry state rusak atau tidak dapat disimpan, plugin menonaktifkan custom block dan meminta pemulihan backup daripada memakai ulang ID blok yang mungkin sudah ada di dunia.
 
 ## Perubahan 0.3.0 (perbaikan bug)
 
@@ -116,12 +131,7 @@ Tiga hal yang perlu diketahui:
 
 ### Aturan custom block
 
-Karena identitas custom block tersimpan di blockstate noteblock, ada dua aturan operasional:
-
-1. **Jangan ganti `instrument`/`note` di `blocks.yml` setelah pemain membangun block itu.** Blok lama ikut berubah tampilan karena identitasnya = posisi file, bukan ID.
-2. **Hapus `placed-blocks.txt` hanya saat server kosong.** File itu yang membedakan block kita dari noteblock vanilla; menghapusnya = semua block custom jadi tidak bisa di-drop.
-
-Kalau file ini hilang, `onPlace` akan menandai ulang begitu pemain menaruh block lagi — jadi file di-backup bareng `plugins/CustomItems/`.
+Plugin menyimpan pasangan instrument/note per key di `plugins/CustomItems/block-states.yml`. Jangan hapus atau edit file itu setelah custom block dipasang di dunia. Key yang dihapus dari `blocks.yml` tetap menahan slotnya supaya blok lama tidak berubah menjadi jenis lain. `placed-blocks.txt` juga perlu masuk backup; file ini mencatat lokasi custom block dan membedakannya dari noteblock vanilla yang memiliki state sama.
 
 ## Konfigurasi
 
@@ -256,7 +266,7 @@ Kode keluar `0` = aman dibagikan ke pemain, `1` = ada masalah. Jalankan ini sete
 gradle build
 ```
 
-Butuh Gradle 9.x + Java 25. Hasil di `build/libs/CustomItems-0.8.0.jar`.
+Butuh Gradle 9.x + Java 25. Hasil di `build/libs/CustomItems-0.8.1.jar`.
 
 Kalau Gradle tidak terpasang (repo ini belum punya wrapper), bisa kompilasi langsung dengan JDK 25:
 
@@ -273,9 +283,9 @@ gagal dengan "cannot find symbol" meskipun paper-api-nya benar.
 
 ## Catatan teknis
 
-- Items: `custom_model_data` string + item model definition format 1.21.4+ (`select`)
-- Blocks: noteblock method (instrument + note unik per block). Identitas block dibaca dari blockstate noteblock (`instrument` + `note`), **bukan** PDC — noteblock tidak punya block entity. Konsekuensinya: jangan ubah `instrument`/`note` sebuah block di `blocks.yml` setelah pemain membangun dengannya — block lama akan berubah tampilan
-- Blocks: lokasi yang sudah di-*mark* disimpan di `plugins/CustomItems/placed-blocks.txt`. `onBreak` menolak drop item custom kalau lokasi tidak ada di sana, jadi noteblock vanilla yang di-*right-click* jadi `instrument+note` yang sama tidak bisa di-*exploit*
+- Items: komponen `item_model` menunjuk aset milik plugin; file model item vanilla tidak ditimpa. Item custom lama dimigrasikan ketika inventory atau item drop dibuka/diambil
+- Blocks: noteblock method (instrument + note unik per block). Identitas block dibaca dari blockstate noteblock (`instrument` + `note`), **bukan** PDC — noteblock tidak punya block entity. Alokasi state yang stabil disimpan di `plugins/CustomItems/block-states.yml`
+- Blocks: lokasi yang sudah di-*mark* disimpan di `plugins/CustomItems/placed-blocks.txt`; perubahan disimpan berkala dan saat plugin berhenti. Break yang dibatalkan tidak menjatuhkan item; piston dan ledakan tidak memindahkan/menghapus custom block
 - `blockstates/note_block.json` **di-override**: satu variant per custom block (`instrument=..,note=..,powered=..`) untuk `powered` false **dan** true, **plus** variant `""` yang menunjuk model noteblock vanilla. `""` itu wajib, bukan hiasan — itu fallback yang dipakai client saat tidak ada key yang cocok, dan vanilla sendiri hanya mendefinisikan satu variant itu untuk ratusan kombinasi state. Tanpa `""`, override apa pun hanya bisa menghapus model dari **seluruh** noteblock di dunia. Persis bug yang 0.3.0 ship dan 0.4.0 hapus dengan cara yang keliru. Maksimal **250 block** (10 instrument × 25 note)
 - Recipes: ingredient custom dicocokkan via `RecipeChoice.exactChoice(ItemStack)` (constructor `ExactChoice(ItemStack)` deprecated-for-removal di Paper 26.x)
 - Mobs: vanilla model + atribut custom (bukan model 3D custom seperti ModelEngine)

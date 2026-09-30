@@ -9,6 +9,7 @@ import java.io.File;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 public final class Sounds {
@@ -32,18 +33,29 @@ public final class Sounds {
             for (String key : sec.getKeys(false)) {
                 ConfigurationSection s = sec.getConfigurationSection(key);
                 if (s == null) continue;
-                byKey.put(key.toLowerCase(), new SoundDef(
-                        key.toLowerCase(),
+                String normalized = key.toLowerCase(Locale.ROOT);
+                if (!normalized.matches("[a-z0-9_-]+") || byKey.containsKey(normalized)) {
+                    plugin.getLogger().warning("sounds.yml: invalid or duplicate sound key '" + key + "'");
+                    continue;
+                }
+                float volume = (float) s.getDouble("volume", 1.0);
+                float pitch = (float) s.getDouble("pitch", 1.0);
+                if (!Float.isFinite(volume) || volume < 0 || !Float.isFinite(pitch) || pitch <= 0) {
+                    plugin.getLogger().warning("sounds.yml: invalid volume/pitch for '" + key + "'");
+                    continue;
+                }
+                byKey.put(normalized, new SoundDef(
+                        normalized,
                         s.getString("file", key + ".ogg"),
-                        (float) s.getDouble("volume", 1.0),
-                        (float) s.getDouble("pitch", 1.0)));
+                        volume,
+                        pitch));
             }
         }
         plugin.getLogger().info("Loaded " + byKey.size() + " custom sounds");
     }
 
     public SoundDef get(String key) {
-        return byKey.get(key.toLowerCase());
+        return key == null ? null : byKey.get(key.toLowerCase(Locale.ROOT));
     }
 
     public List<SoundDef> all() {

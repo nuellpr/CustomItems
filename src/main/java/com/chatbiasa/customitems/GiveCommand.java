@@ -2,9 +2,7 @@ package com.chatbiasa.customitems;
 
 import net.kyori.adventure.text.Component;
 import org.bukkit.command.Command;
-import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
-import org.bukkit.command.TabCompleter;
 import org.bukkit.command.TabExecutor;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
@@ -15,6 +13,7 @@ import java.util.Locale;
 
 public final class GiveCommand implements TabExecutor {
 
+    private static final String USAGE = "give <item> [player] | spawn <mob> | play <sound> | menu | reload | pack | list";
     private final CustomItemsPlugin plugin;
 
     public GiveCommand(CustomItemsPlugin plugin) {
@@ -23,16 +22,12 @@ public final class GiveCommand implements TabExecutor {
 
     /** every key an admin can type, so /ci list is a single source of truth for the command surface */
     private void list(CommandSender sender) {
-        var ranks = new ArrayList<String>();
-        plugin.ranks().all().forEach(d -> ranks.add(d.key()));
-        var emojis = new ArrayList<String>();
-        plugin.emojis().all().forEach(d -> emojis.add(d.key()));
         send(sender, "Items", plugin.items().keys());
         send(sender, "Blocks", plugin.blocks().all().stream().map(Blocks.BlockDef::key).toList());
         send(sender, "Mobs", plugin.mobs().all().stream().map(Mobs.MobDef::key).toList());
         send(sender, "Sounds", plugin.sounds().all().stream().map(Sounds.SoundDef::key).toList());
-        send(sender, "Ranks", ranks);
-        send(sender, "Emojis", emojis);
+        send(sender, "Ranks", plugin.ranks().all().stream().map(Ranks.RankDef::key).toList());
+        send(sender, "Emojis", plugin.emojis().all().stream().map(Emojis.EmojiDef::key).toList());
     }
 
     private void send(CommandSender sender, String label, List<String> keys) {
@@ -91,8 +86,10 @@ public final class GiveCommand implements TabExecutor {
         if (args.length >= 1 && args[0].equalsIgnoreCase("reload")) {
             plugin.reloadConfig();
             plugin.loadItems();
+            JoinListener.migrateOnline(plugin);
             try {
                 plugin.pack().build();
+                plugin.refreshPackServer();
                 int n = resendPack();
                 sender.sendMessage(Component.text("Reloaded items and rebuilt pack; re-sent to "
                         + n + " online player(s)."));
@@ -147,12 +144,21 @@ public final class GiveCommand implements TabExecutor {
             sender.sendMessage(Component.text("Playing " + sdef.key()));
             return true;
         }
-        if (args.length < 2) {
-            sender.sendMessage(Component.text("Usage: /" + label + " give <item> [player] | /" + label + " spawn <mob> | /" + label + " play <sound> | /" + label + " menu | /" + label + " reload | /" + label + " pack | /" + label + " list"));
+        if (args.length == 0) {
+            sender.sendMessage(Component.text("Usage: /" + label + " " + USAGE));
+            return true;
+        }
+        if (!args[0].equalsIgnoreCase("give")) {
+            sender.sendMessage(Component.text("Unknown subcommand: " + args[0]));
+            sender.sendMessage(Component.text("Usage: /" + label + " " + USAGE));
+            return true;
+        }
+        if (args.length < 2 || args.length > 3) {
+            sender.sendMessage(Component.text("Usage: /" + label + " " + USAGE));
             return true;
         }
         ItemDef def = plugin.items().get(args[1]);
-        Blocks.BlockDef bdef = def == null ? plugin.blocks().get(args[1].toLowerCase()) : null;
+        Blocks.BlockDef bdef = def == null ? plugin.blocks().get(args[1]) : null;
         if (def == null && bdef == null) {
             sender.sendMessage(Component.text("Unknown item: " + args[1]));
             return true;
@@ -171,8 +177,10 @@ public final class GiveCommand implements TabExecutor {
             return true;
         }
         ItemStack stack = def != null ? plugin.items().stack(def) : plugin.blocks().stack(bdef);
-        target.getInventory().addItem(stack);
-        sender.sendMessage(Component.text("Gave " + (def != null ? def.key() : bdef.key()) + " to " + target.getName()));
+        var leftovers = target.getInventory().addItem(stack);
+        leftovers.values().forEach(item -> target.getWorld().dropItemNaturally(target.getLocation(), item));
+        sender.sendMessage(Component.text("Gave " + (def != null ? def.key() : bdef.key()) + " to " + target.getName()
+                + (leftovers.isEmpty() ? "" : " (overflow dropped nearby)")));
         return true;
     }
 }

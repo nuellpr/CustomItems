@@ -34,8 +34,7 @@ public final class CustomItemsPlugin extends JavaPlugin {
             getLogger().severe("Failed to build resource pack: " + e.getMessage());
         }
         try {
-            packServer = new PackServer(this);
-            packUrl = packServer.start();
+            refreshPackServer();
         } catch (Exception e) {
             getLogger().severe("Failed to start pack webserver: " + e.getMessage());
         }
@@ -46,10 +45,13 @@ public final class CustomItemsPlugin extends JavaPlugin {
         gui = new GuiMenu(this);
         getServer().getPluginManager().registerEvents(gui, this);
         getCommand("ci").setExecutor(new GiveCommand(this));
+        blocks.startSaveTask();
+        JoinListener.migrateOnline(this);
     }
 
     @Override
     public void onDisable() {
+        if (blocks != null) blocks.shutdown();
         if (packServer != null) packServer.stop();
     }
 
@@ -105,5 +107,15 @@ public final class CustomItemsPlugin extends JavaPlugin {
 
     public String packUrl() {
         return packUrl;
+    }
+
+    public boolean migrateItemModel(org.bukkit.inventory.ItemStack stack) {
+        if (stack == null || stack.getType().isAir()) return false;
+        return items.migrateModel(stack) || blocks.migrateModel(stack);
+    }
+
+    public void refreshPackServer() throws java.io.IOException {
+        if (packServer == null) packServer = new PackServer(this);
+        packUrl = packServer.start();
     }
 }

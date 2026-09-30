@@ -11,11 +11,11 @@ import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.persistence.PersistentDataType;
-import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
 import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 
 public final class Mobs implements Listener {
@@ -41,9 +41,14 @@ public final class Mobs implements Listener {
         for (String key : mobs.getKeys(false)) {
             ConfigurationSection s = mobs.getConfigurationSection(key);
             if (s == null) continue;
+            String normalized = key.toLowerCase(Locale.ROOT);
+            if (!normalized.matches("[a-z0-9_-]+") || byKey.containsKey(normalized)) {
+                plugin.getLogger().warning("mobs.yml: invalid or duplicate mob key '" + key + "'");
+                continue;
+            }
             EntityType type;
             try {
-                type = EntityType.valueOf(s.getString("type", "ZOMBIE").toUpperCase());
+                type = EntityType.valueOf(s.getString("type", "ZOMBIE").toUpperCase(Locale.ROOT));
             } catch (IllegalArgumentException e) {
                 plugin.getLogger().warning("mobs.yml: unknown type for '" + key + "'");
                 continue;
@@ -56,12 +61,19 @@ public final class Mobs implements Listener {
                         + "' is not a spawnable living entity");
                 continue;
             }
+            double health = s.getDouble("health", 20.0);
+            double speed = s.getDouble("speed", 0.25);
+            if (!Double.isFinite(health) || health <= 0 || health > 1024
+                    || !Double.isFinite(speed) || speed < 0 || speed > 1024) {
+                plugin.getLogger().warning("mobs.yml: invalid health/speed for '" + key + "' (0 < health <= 1024, 0 <= speed <= 1024)");
+                continue;
+            }
             MobDef def = new MobDef(
-                    key.toLowerCase(),
+                    normalized,
                     type,
                     MiniMessage.miniMessage().deserialize(s.getString("name", key)),
-                    s.getDouble("health", 20.0),
-                    s.getDouble("speed", 0.25)
+                    health,
+                    speed
             );
             byKey.put(def.key(), def);
         }
@@ -69,7 +81,7 @@ public final class Mobs implements Listener {
     }
 
     public MobDef get(String key) {
-        return byKey.get(key.toLowerCase());
+        return key == null ? null : byKey.get(key.toLowerCase(Locale.ROOT));
     }
 
     public Collection<MobDef> all() {
@@ -106,7 +118,7 @@ public final class Mobs implements Listener {
             if (!(ent instanceof LivingEntity le)) continue;
             String key = le.getPersistentDataContainer().get(plugin.mobKey(), PersistentDataType.STRING);
             if (key == null) continue;
-            MobDef def = byKey.get(key.toLowerCase());
+            MobDef def = byKey.get(key.toLowerCase(Locale.ROOT));
             // a key removed from mobs.yml is left alone: it is now just a vanilla mob
             if (def != null) apply(le, def);
         }

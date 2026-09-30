@@ -66,7 +66,7 @@ else {
     if ($bs -match '\{"model":"minecraft:block/note_block"\}') { Ok 'blockstate keeps the "" fallback for non-custom noteblocks' }
     else { Bad 'blockstate has no "" fallback; every vanilla noteblock in the world will lose its model' }
 
-    $m = [regex]::Matches($bs, '"instrument=([^"]+)":\{"model":"minecraft:block/(cblock_[^"]+)"\}')
+    $m = [regex]::Matches($bs, '"instrument=([^"]+)":\{"model":"([^":]+:block/cblock_[^"]+)"\}')
     if ($m.Count) { Ok "blockstate maps $($m.Count) custom block variants" }
     else { Bad 'blockstate has no instrument= variants; custom blocks will render as vanilla noteblocks' }
 
@@ -87,27 +87,28 @@ else {
 
     # and the model each variant points at has to actually exist in the pack
     foreach ($v in $m) {
-        $model = "assets/minecraft/models/block/$($v.Groups[2].Value).json"
+        $modelId = [regex]::Match($v.Groups[2].Value, '^([^:]+):block/(.+)$')
+        if (-not $modelId.Success) { Bad "variant references invalid model ID '$($v.Groups[2].Value)'"; continue }
+        $model = "assets/$($modelId.Groups[1].Value)/models/block/$($modelId.Groups[2].Value).json"
         if ($names -notcontains $model) { Bad "variant '$($v.Groups[1].Value)' references $model, which the pack does not contain" }
     }
 }
 
-$nbItem = Read-Entry 'assets/minecraft/items/note_block.json'
-if ($nbItem) {
-    try {
-        $j = $nbItem | ConvertFrom-Json
-        if ($j.model.type -eq 'minecraft:select') { Ok "items/note_block.json selects on $($j.model.property)" }
-        else { Warn "items/note_block.json model.type is $($j.model.type), expected minecraft:select" }
-    } catch { Bad "items/note_block.json is not valid JSON: $($_.Exception.Message)" }
-}
+# Custom item models live in the plugin namespace; vanilla item definitions must stay untouched.
+$minecraftItems = @($names | Where-Object { $_ -match '^assets/minecraft/items/.+\.json$' })
+if ($minecraftItems.Count -eq 0) { Ok 'no vanilla item model definitions are overridden' }
+else { Bad "resource pack overrides vanilla item definitions: $($minecraftItems -join ', ')" }
 
-# every cblock_* model/texture referenced anywhere in the pack must exist inside the pack
+# every cblock_* block model/texture and its custom item model must exist in the pack
 $dangling = @()
 foreach ($n in $names) {
-    if ($n -notmatch 'assets/minecraft/models/block/(cblock_.+)\.json$') { continue }
-    $id = $Matches[1]
-    if (-not ($names -contains "assets/minecraft/textures/block/$id.png")) { $dangling += $id }
-    if (-not ($names -contains "assets/minecraft/models/item/$($id -replace '^cblock_', '').json")) { $dangling += "$id (item model)" }
+    if ($n -notmatch '^assets/([^/]+)/models/block/(cblock_[^/]+)\.json$') { continue }
+    $namespace = $Matches[1]
+    $id = $Matches[2]
+    $key = $id -replace '^cblock_', ''
+    if (-not ($names -contains "assets/$namespace/textures/block/$id.png")) { $dangling += $id }
+    if (-not ($names -contains "assets/$namespace/items/block/$key.json")) { $dangling += "$id (item definition)" }
+    if (-not ($names -contains "assets/$namespace/models/item/block/$key.json")) { $dangling += "$id (item model)" }
 }
 if ($dangling.Count -eq 0) { Ok 'every cblock_* block model has its texture and item model' }
 else { Bad "cblock_* references missing entries: $(($dangling | Select-Object -Unique) -join ', ')" }
@@ -170,8 +171,13 @@ if ($ConfigDir -and (Test-Path $ConfigDir)) {
             if ($line -match '^\s*items:\s*$') { $inSection = $true; continue }
             if ($inSection -and $line -match '^\s{2}(\S+):\s*$') {
                 $key = $Matches[1]
-                if ($names -contains "assets/minecraft/textures/item/$key.png") { Ok "item $key texture packed" }
-                elseif ((Test-Path (Join-Path $texDir "$key.png"))) { Bad "item $key texture exists on disk but is NOT in pack - run /ci reload" }
+                $definition = @($names | Where-Object { $_ -match "^assets/([^/]+)/items/$([regex]::Escape($key))\.json$" } | Select-Object -First 1)
+                if ($definition.Count -gt 0) {
+                    $namespace = [regex]::Match($definition[0], '^assets/([^/]+)/items/').Groups[1].Value
+                    if ($names -contains "assets/$namespace/textures/item/$key.png") { Ok "item $key model and texture packed" }
+                    else { Bad "item $key texture is not in pack - run /ci reload" }
+                }
+                elseif ((Test-Path (Join-Path $texDir "$key.png"))) { Bad "item $key model/texture exists on disk but is NOT in pack - run /ci reload" }
                 else { Bad "item $key texture missing: $texDir\$key.png" }
             }
         }

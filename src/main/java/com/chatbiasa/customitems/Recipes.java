@@ -12,7 +12,10 @@ import org.bukkit.inventory.ShapelessRecipe;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 public final class Recipes {
 
@@ -35,16 +38,22 @@ public final class Recipes {
             return;
         }
         int count = 0;
+        Set<String> seen = new HashSet<>();
         for (String name : root.getKeys(false)) {
             ConfigurationSection r = root.getConfigurationSection(name);
             if (r == null) continue;
             try {
+                String normalizedName = name.toLowerCase(Locale.ROOT);
+                if (!normalizedName.matches("[a-z0-9_-]+") || !seen.add(normalizedName)) {
+                    plugin.getLogger().warning("recipes.yml: invalid or duplicate recipe key '" + name + "'");
+                    continue;
+                }
                 ItemStack result = resultStack(r.getString("result", ""));
                 if (result == null) {
                     plugin.getLogger().warning("recipes.yml: unknown result for '" + name + "'");
                     continue;
                 }
-                NamespacedKey key = new NamespacedKey(plugin, name.toLowerCase());
+                NamespacedKey key = new NamespacedKey(plugin, normalizedName);
                 String type = r.getString("type", "shaped");
                 boolean ok;
                 if ("shapeless".equalsIgnoreCase(type)) {
@@ -56,7 +65,7 @@ public final class Recipes {
                         recipe.addIngredient(choice);
                     }
                     if (ok) Bukkit.addRecipe(recipe);
-                } else {
+                } else if ("shaped".equalsIgnoreCase(type)) {
                     List<String> pattern = r.getStringList("pattern");
                     ConfigurationSection ingSec = r.getConfigurationSection("ingredients");
                     if (pattern.isEmpty() || ingSec == null) {
@@ -67,11 +76,15 @@ public final class Recipes {
                     recipe.shape(pattern.toArray(new String[0]));
                     ok = true;
                     for (String c : ingSec.getKeys(false)) {
+                        if (c.length() != 1) { ok = false; break; }
                         RecipeChoice choice = choice(ingSec.get(c));
                         if (choice == null) { ok = false; break; }
                         recipe.setIngredient(c.charAt(0), choice);
                     }
                     if (ok) Bukkit.addRecipe(recipe);
+                } else {
+                    plugin.getLogger().warning("recipes.yml: unknown recipe type '" + type + "' for '" + name + "'");
+                    continue;
                 }
                 if (ok) {
                     registered.add(key);
@@ -90,7 +103,7 @@ public final class Recipes {
         if (key == null) return null;
         ItemDef idef = plugin.items().get(key);
         if (idef != null) return plugin.items().stack(idef);
-        Blocks.BlockDef bdef = plugin.blocks().get(key.toLowerCase());
+        Blocks.BlockDef bdef = plugin.blocks().get(key);
         if (bdef != null) return plugin.blocks().stack(bdef);
         return null;
     }
@@ -99,12 +112,12 @@ public final class Recipes {
     private RecipeChoice choice(Object value) {
         if (value == null) return null;
         String s = String.valueOf(value);
+        ItemDef idef = plugin.items().get(s);
+        if (idef != null) return RecipeChoice.exactChoice(plugin.items().stack(idef));
+        Blocks.BlockDef bdef = plugin.blocks().get(s);
+        if (bdef != null) return RecipeChoice.exactChoice(plugin.blocks().stack(bdef));
         Material mat = Material.matchMaterial(s);
         if (mat != null) return new RecipeChoice.MaterialChoice(mat);
-        ItemDef idef = plugin.items().get(s.toLowerCase());
-        if (idef != null) return RecipeChoice.exactChoice(plugin.items().stack(idef));
-        Blocks.BlockDef bdef = plugin.blocks().get(s.toLowerCase());
-        if (bdef != null) return RecipeChoice.exactChoice(plugin.blocks().stack(bdef));
         return null;
     }
 }

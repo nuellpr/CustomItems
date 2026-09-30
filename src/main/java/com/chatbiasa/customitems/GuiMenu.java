@@ -6,6 +6,7 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.inventory.InventoryDragEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 import org.bukkit.inventory.ItemStack;
@@ -94,7 +95,14 @@ public final class GuiMenu implements Listener {
         if (!(e.getView().getTopInventory().getHolder() instanceof Menu menu)) return;
         // Only the menu itself is read-only. Clicks in the player's own inventory must stay live,
         // otherwise shift-clicking to rearrange a hotbar is silently dead while the menu is open.
-        if (e.getClickedInventory() != e.getView().getTopInventory()) return;
+        if (e.getClickedInventory() != e.getView().getTopInventory()) {
+            // Shift-click and double-click can move or collect items across both inventories,
+            // letting arbitrary player items enter the menu and be copied from its display slots.
+            if (e.isShiftClick() || e.getClick() == org.bukkit.event.inventory.ClickType.DOUBLE_CLICK) {
+                e.setCancelled(true);
+            }
+            return;
+        }
         e.setCancelled(true);
         if (e.getSlot() == PREV_SLOT) {
             show(menu.viewer(), menu.page() - 1);
@@ -107,5 +115,13 @@ public final class GuiMenu implements Listener {
         ItemStack cur = e.getCurrentItem();
         if (cur == null || cur.getType().isAir() || !(e.getWhoClicked() instanceof Player p)) return;
         p.getInventory().addItem(cur.clone());
+    }
+
+    @EventHandler
+    public void onDrag(InventoryDragEvent e) {
+        if (!(e.getView().getTopInventory().getHolder() instanceof Menu)) return;
+        if (e.getRawSlots().stream().anyMatch(slot -> slot < e.getView().getTopInventory().getSize())) {
+            e.setCancelled(true);
+        }
     }
 }

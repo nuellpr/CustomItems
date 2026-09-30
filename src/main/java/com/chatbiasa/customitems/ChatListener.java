@@ -40,8 +40,9 @@ public class ChatListener implements Listener {
         // italic off at the root so glyph chars don't render slanted; children that set it keep it
         final Component body = msg.decoration(TextDecoration.ITALIC, TextDecoration.State.FALSE);
         // renderer runs per-viewer, so viewers without the pack still get readable text
+        var originalRenderer = event.renderer();
         event.renderer((source, displayName, m, viewer) -> {
-            if (rank == null) return body;
+            if (rank == null) return originalRenderer.render(source, displayName, body, viewer);
             return Component.join(JoinConfiguration.separator(Component.space()),
                     Component.text(plugin.ranks().glyph(rank)).decoration(TextDecoration.ITALIC, false),
                     displayName,
