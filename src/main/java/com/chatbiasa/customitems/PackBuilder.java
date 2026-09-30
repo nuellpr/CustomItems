@@ -213,8 +213,11 @@ public final class PackBuilder {
                             }
                             String relative = kindDir.relativize(file).toString().replace('\\', '/');
                             String firstPart = relative.contains("/") ? relative.substring(0, relative.indexOf('/')) : relative;
-                            if ((kind.equals("models") && List.of("item", "block").contains(firstPart))
-                                    || (kind.equals("textures") && List.of("item", "block", "font").contains(firstPart))) {
+                            boolean vanillaNamespace = namespace.equals("minecraft");
+                            boolean pluginNamespace = namespace.equals(plugin.getName().toLowerCase(Locale.ROOT));
+                            if ((vanillaNamespace || pluginNamespace)
+                                    && ((kind.equals("models") && List.of("item", "block").contains(firstPart))
+                                    || (kind.equals("textures") && List.of("item", "block", "font").contains(firstPart)))) {
                                 plugin.getLogger().warning("Ignoring imported asset in reserved path: " + relative);
                                 continue;
                             }
