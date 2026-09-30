@@ -36,7 +36,7 @@ import javax.tools.ToolProvider;
 
 /** Small JDK-only build and maintenance tools for CustomItems. */
 public final class CustomItemsTools {
-    private static final String VERSION = "0.8.1";
+    private static final String VERSION = "0.8.2";
     private static final String[] MISSING_FONT_REFS = {
             "minecraft:include/space", "minecraft:include/default", "minecraft:include/unifont"
     };

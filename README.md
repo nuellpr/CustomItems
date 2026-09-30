@@ -55,10 +55,18 @@ Tiga hal yang perlu diketahui:
 
 ## Install
 
-1. Download `CustomItems-0.8.1.jar` dari [Releases](../../releases), taruh di folder `plugins/`
+1. Download `CustomItems-0.8.2.jar` dari [Releases](../../releases), taruh di folder `plugins/`
 2. Start server → folder `plugins/CustomItems/` tergenerate; tekstur bawaan Ruby Sword, Marble Block, admin, dan smile ikut disalin otomatis ke `textures/`
 3. Untuk server online: **wajib** set `external-url` di `config.yml` ke IP/URL publik (mis. `http://play.myserver.com:8077`) dan buka port-nya. Kalau dibiarkan kosong, plugin memakai bind IP server dan hanya berfungsi untuk pemain di mesin yang sama — URL `http://0.0.0.0:8077` tidak bisa di-download client.
 4. `/ci reload`
+
+## Perubahan 0.8.2
+
+| Perubahan | Detail |
+|---|---|
+| Tekstur bawaan otomatis | JAR menyertakan tekstur contoh dan menyalinnya ke folder data plugin saat pertama dijalankan, sehingga pengguna tidak perlu menyalin file PNG manual. Tekstur yang sudah ada tidak ditimpa. |
+| Perilaku item | `items.yml` dapat mengatur damage, armor, attack speed, efek saat dipegang/dipakai, serta ability on-hit dan on-right-click. Semua opsi bersifat opsional dan default-nya mempertahankan perilaku lama. |
+| Drop dan skill mob | `mobs.yml` dapat mengatur drop vanilla/custom dengan peluang dan skill potion sederhana saat menyerang. Konfigurasi lama tetap berlaku. |
 
 ## Perubahan 0.8.1 (stabilitas dan kompatibilitas)
 
@@ -317,7 +325,7 @@ Kode keluar `0` = pack lolos validasi, `1` = ada masalah, `2` = pemakaian/perint
 java tools/CustomItemsTools.java build --libraries "/path/to/paper/libraries"
 ```
 
-Butuh JDK 25 dan folder `libraries` dari server Paper 26.2 (harus berisi `paper-api` serta library dependensinya). Hasilnya di `build/libs/CustomItems-0.8.1.jar`, termasuk tekstur bawaan yang disalin otomatis ke folder data plugin pada startup pertama. Bisa juga diberikan classpath secara langsung lewat `--classpath` atau environment variable `PAPER_CLASSPATH`.
+Butuh JDK 25 dan folder `libraries` dari server Paper 26.2 (harus berisi `paper-api` serta library dependensinya). Hasilnya di `build/libs/CustomItems-0.8.2.jar`, termasuk tekstur bawaan yang disalin otomatis ke folder data plugin pada startup pertama. Bisa juga diberikan classpath secara langsung lewat `--classpath` atau environment variable `PAPER_CLASSPATH`.
 
 Untuk membuat server Paper uji terpisah, gunakan `java tools/CustomItemsTools.java setup-server --paper-jar "path/to/paper.jar"`. Metadata plugin (`plugin.yml`), konfigurasi YAML, dan aset PNG/OGG tetap memakai format yang diwajibkan Paper/resource pack; seluruh kode plugin dan alat yang bisa dieksekusi ditulis dalam Java.
 
