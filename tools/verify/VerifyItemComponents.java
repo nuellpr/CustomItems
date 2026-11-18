@@ -3,7 +3,7 @@ import java.nio.file.Path;
 
 public class VerifyItemComponents {
     public static void main(String[] args) throws Exception {
-        String source = Files.readString(Path.of("src/main/java/com/chatbiasa/customitems/Items.java"));
+        String source = Files.readString(Path.of(args[0], "src/main/java/com/chatbiasa/customitems/Items.java"));
 
         int meta = source.indexOf("s.setItemMeta(meta);");
         int model = source.indexOf("s.setData(DataComponentTypes.ITEM_MODEL");

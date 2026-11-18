@@ -47,7 +47,10 @@ public final class CustomItemsPlugin extends JavaPlugin {
         try {
             refreshPackServer();
         } catch (Exception e) {
-            getLogger().severe("Failed to start pack webserver: " + e.getMessage());
+            getLogger().severe("Failed to start pack webserver: " + e.getMessage()
+                    + ". Players would join without a resource pack; CustomItems is disabled.");
+            getServer().getPluginManager().disablePlugin(this);
+            return;
         }
         getServer().getPluginManager().registerEvents(new JoinListener(this), this);
         getServer().getPluginManager().registerEvents(new BlockListener(this), this);
@@ -61,6 +64,9 @@ public final class CustomItemsPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(gui, this);
         getCommand("ci").setExecutor(new GiveCommand(this));
         blocks.startSaveTask();
+        getServer().getScheduler().runTaskTimer(this, () -> {
+            for (org.bukkit.entity.Player online : getServer().getOnlinePlayers()) ranks.refresh(online);
+        }, 100L, 100L);
         JoinListener.migrateOnline(this);
     }
 

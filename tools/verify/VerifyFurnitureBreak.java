@@ -8,7 +8,7 @@ public final class VerifyFurnitureBreak {
     }
 
     public static void main(String[] args) throws Exception {
-        String src = Files.readString(Path.of("src/main/java/com/chatbiasa/customitems/FurnitureListener.java"));
+        String src = Files.readString(Path.of(args[0], "src/main/java/com/chatbiasa/customitems/FurnitureListener.java"));
         check(!src.contains("if (!attacked.isValid()) return;"), "break must not depend on the attacked entity still being valid");
         check(!src.contains("onQuit"), "onQuit must not release a pending break before its one-tick task runs");
         check(src.contains("pendingBreaks"), "pending breaks must be tracked per pair, not per entity");

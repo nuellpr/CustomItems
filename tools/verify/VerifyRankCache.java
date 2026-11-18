@@ -21,7 +21,7 @@ public final class VerifyRankCache {
         check(refresh, "Ranks.refresh(Player) missing");
         check(cached, "Ranks.cached(UUID) missing");
 
-        String src = Files.readString(Path.of("src/main/java/com/chatbiasa/customitems/ChatListener.java"));
+        String src = Files.readString(Path.of(args[0], "src/main/java/com/chatbiasa/customitems/ChatListener.java"));
         check(!src.contains("forPlayer(event.getPlayer())"), "AsyncChatEvent still resolves rank via hasPermission");
         check(!src.contains("hasPermission("), "ChatListener still calls the permission API");
         System.out.println("OK");

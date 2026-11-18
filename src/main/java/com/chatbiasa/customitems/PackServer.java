@@ -33,7 +33,7 @@ public final class PackServer {
 
         if (server == null || boundPort != port) {
             HttpServer replacement = HttpServer.create(new InetSocketAddress(port), 0);
-            ExecutorService replacementExecutor = Executors.newFixedThreadPool(2, task -> {
+            ExecutorService replacementExecutor = Executors.newFixedThreadPool(8, task -> {
                 Thread thread = new Thread(task, "CustomItems-PackServer");
                 thread.setDaemon(true);
                 return thread;
@@ -102,8 +102,10 @@ public final class PackServer {
             host = ip;
         }
         host = host.replaceAll("/+$", "");
-        return (host.matches("^https?://.*") ? host : "http://" + host + ":" + port)
-                + (host.endsWith(".zip") ? "" : "/pack.zip");
+        boolean hasScheme = host.matches("^https?://.*");
+        boolean hasPort = host.matches(".*:\\d+$");
+        String base = hasScheme ? host : "http://" + host + (hasPort ? "" : ":" + port);
+        return base + (base.endsWith(".zip") ? "" : "/pack.zip");
     }
 
     public synchronized void stop() {

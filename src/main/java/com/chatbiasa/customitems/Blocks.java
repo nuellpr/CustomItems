@@ -323,6 +323,22 @@ public final class Blocks {
         if (l != null && placed.remove(coord(l))) placedDirty = true;
     }
 
+    /** A saved marker is stale once its noteblock is gone or no longer matches a custom block. */
+    private boolean markerStillValid(String marker) {
+        String[] parts = marker.split(",", -1);
+        if (parts.length != 4) return false;
+        try {
+            org.bukkit.World world = org.bukkit.Bukkit.getWorld(UUID.fromString(parts[0]));
+            if (world == null) return true; // world not loaded — keep, do not lose the marker
+            org.bukkit.block.Block block = world.getBlockAt(
+                    Integer.parseInt(parts[1]), Integer.parseInt(parts[2]), Integer.parseInt(parts[3]));
+            if (!(block.getBlockData() instanceof org.bukkit.block.data.type.NoteBlock nb)) return false;
+            return byNoteBlock(nb) != null;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
+
     private void loadPlaced() {
         placed.clear();
         if (!placedFile.isFile()) {
@@ -343,6 +359,10 @@ public final class Blocks {
                     continue;
                 }
                 if (!migrated.equals(line.trim())) placedDirty = true;
+                if (!markerStillValid(migrated)) {
+                    placedDirty = true;
+                    continue;
+                }
                 placed.add(migrated);
             }
         } catch (IOException e) {

@@ -114,7 +114,7 @@ public final class GuiMenu implements Listener {
         }
         ItemStack cur = e.getCurrentItem();
         if (cur == null || cur.getType().isAir() || !(e.getWhoClicked() instanceof Player p)) return;
-        p.getInventory().addItem(cur.clone());
+        p.getInventory().addItem(cur.clone()).values().forEach(item -> p.getWorld().dropItemNaturally(p.getLocation(), item));
     }
 
     @EventHandler

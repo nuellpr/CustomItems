@@ -36,7 +36,7 @@ public final class PackBuilder {
         File temp = new File(plugin.getDataFolder(), "pack.zip.tmp");
         try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(temp.toPath()))) {
             // 1.21.9+ reads min_format/max_format; pack_format stays for older clients.
-            int fmt = plugin.getConfig().getInt("pack-format", 88);
+            int fmt = Math.max(1, Math.min(255, plugin.getConfig().getInt("pack-format", 88)));
             put(zip, "pack.mcmeta", """
                     {"pack":{"pack_format":%d,"min_format":%d,"max_format":%d,"description":"CustomItems pack"}}""".formatted(
                     fmt, fmt, fmt));
@@ -223,9 +223,10 @@ public final class PackBuilder {
                             String relative = kindDir.relativize(file).toString().replace('\\', '/');
                             String firstPart = relative.contains("/") ? relative.substring(0, relative.indexOf('/')) : relative;
                             boolean pluginNamespace = namespace.equals(plugin.getName().toLowerCase(Locale.ROOT));
-                            if (pluginNamespace
+                            if ((pluginNamespace
                                     && ((kind.equals("models") && List.of("item", "block").contains(firstPart))
-                                    || (kind.equals("textures") && List.of("item", "block", "font").contains(firstPart)))) {
+                                    || (kind.equals("textures") && List.of("item", "block", "font").contains(firstPart))))
+                                    || (namespace.equals("minecraft") && kind.equals("textures") && "font".equals(firstPart))) {
                                 plugin.getLogger().warning("Ignoring imported asset in reserved path: " + relative);
                                 continue;
                             }

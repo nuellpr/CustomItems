@@ -39,7 +39,7 @@ import javax.tools.ToolProvider;
 
 /** Small JDK-only build and maintenance tools for CustomItems. */
 public final class CustomItemsTools {
-    private static final String VERSION = "0.8.6";
+    private static final String VERSION = "0.8.7";
     private static final String[] MISSING_FONT_REFS = {
             "minecraft:include/space", "minecraft:include/default", "minecraft:include/unifont"
     };
@@ -262,8 +262,9 @@ public final class CustomItemsTools {
                     continue;
                 }
 
-                String pluginPrefix = configPath.substring(0, configPath.lastIndexOf("items/"));
-                String relativeConfig = configPath.substring(pluginPrefix.length() + "items/".length());
+                int itemsIndex = configPath.toLowerCase(Locale.ROOT).lastIndexOf("items/");
+                String pluginPrefix = configPath.substring(0, itemsIndex);
+                String relativeConfig = configPath.substring(itemsIndex + "items/".length());
                 String fileName = safeFileName(relativeConfig.replace('/', '_'));
                 Path importedFile = output.resolve("imports").resolve(fileName);
                 if (Files.exists(importedFile)) {
@@ -1339,7 +1340,7 @@ public final class CustomItemsTools {
                 for (String name : List.of("VerifyPack", "VerifyInstrumentRoundTrip", "VerifyRankCache", "VerifyPlacedBlocks", "VerifyFurnitureBreak", "VerifyItemComponents", "VerifyRconResponseId", "VerifyReviewFixes")) {
                     try {
                         Class.forName(name, true, loader).getMethod("main", String[].class)
-                                .invoke(null, (Object) new String[0]);
+                                .invoke(null, (Object) new String[]{root.toString()});
                         report.ok("offline verifier " + name + " passed");
                     } catch (java.lang.reflect.InvocationTargetException e) {
                         Throwable cause = e.getCause();
@@ -1354,8 +1355,13 @@ public final class CustomItemsTools {
     }
 
     private static void checkBlockstate(String text, Set<String> names, Report report) {
-        if (!text.matches("(?s)^\\{\\\"variants\\\":\\{.*}}$"))
-            report.bad("note_block.json is not a {\"variants\":{...}} object");
+        boolean hasVariants;
+        try {
+            hasVariants = object(Json.parse(text)).containsKey("variants");
+        } catch (RuntimeException e) {
+            hasVariants = false;
+        }
+        if (!hasVariants) report.bad("note_block.json is not a {\"variants\":{...}} object");
         if (text.contains("{\"model\":\"minecraft:block/note_block\"}"))
             report.ok("blockstate keeps the \"\" fallback for non-custom noteblocks");
         else report.bad("blockstate has no \"\" fallback; every vanilla noteblock in the world will lose its model");
@@ -1563,12 +1569,16 @@ public final class CustomItemsTools {
         Files.copy(plugin, plugins.resolve(plugin.getFileName()), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
 
         String seed = options.get("seed-from", null);
-        if (seed != null && Files.isDirectory(Path.of(seed))) {
+        if (seed == null) {
+            System.out.println("no --seed-from given: plugin will generate default configs");
+        } else if (!Files.isDirectory(Path.of(seed))) {
+            throw new IllegalArgumentException("--seed-from is not a directory: " + seed);
+        } else {
             Path source = Path.of(seed);
             copyMatching(source.resolve("textures"), data.resolve("textures"), ".png");
             copyMatching(source, data, ".yml");
             System.out.println("seeded config+textures from " + source);
-        } else System.out.println("no --seed-from given: plugin will generate default configs");
+        }
 
         System.out.println("\ntest server ready: " + serverRoot);
         System.out.println("  start : java -Xms512M -Xmx1024M -jar paper.jar --nogui (run from " + serverRoot + ")");
@@ -1675,7 +1685,7 @@ public final class CustomItemsTools {
             for (int i = start; i < args.length; i++) {
                 String key = args[i];
                 if (!key.startsWith("--")) throw new IllegalArgumentException("expected an option, got " + key);
-                if (++i == args.length || args[i].startsWith("--")) throw new IllegalArgumentException("missing value for " + key);
+                if (++i == args.length) throw new IllegalArgumentException("missing value for " + key);
                 values.computeIfAbsent(key.substring(2), ignored -> new ArrayList<>()).add(args[i]);
             }
         }

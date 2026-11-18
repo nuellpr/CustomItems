@@ -64,7 +64,7 @@ public final class Recipes {
                         if (choice == null) { ok = false; break; }
                         recipe.addIngredient(choice);
                     }
-                    if (ok) Bukkit.addRecipe(recipe);
+                    if (ok) ok = Bukkit.addRecipe(recipe);
                 } else if ("shaped".equalsIgnoreCase(type)) {
                     List<String> pattern = r.getStringList("pattern");
                     ConfigurationSection ingSec = r.getConfigurationSection("ingredients");
@@ -81,7 +81,7 @@ public final class Recipes {
                         if (choice == null) { ok = false; break; }
                         recipe.setIngredient(c.charAt(0), choice);
                     }
-                    if (ok) Bukkit.addRecipe(recipe);
+                    if (ok) ok = Bukkit.addRecipe(recipe);
                 } else {
                     plugin.getLogger().warning("recipes.yml: unknown recipe type '" + type + "' for '" + name + "'");
                     continue;

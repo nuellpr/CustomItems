@@ -82,8 +82,8 @@ public final class Items {
                 continue;
             }
             Material base = Material.matchMaterial(s.getString("base", "DIAMOND_SWORD"));
-            if (base == null) {
-                plugin.getLogger().warning("items.yml: unknown base material for '" + key + "'");
+            if (base == null || base.isAir() || !base.isItem()) {
+                plugin.getLogger().warning("items.yml: invalid base material for '" + key + "'");
                 continue;
             }
             String texture = s.getString("texture", key + ".png");

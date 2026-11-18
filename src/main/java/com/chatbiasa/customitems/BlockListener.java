@@ -85,7 +85,6 @@ public final class BlockListener implements Listener {
         // priority; dropping inside this handler would grant an item while leaving the block intact.
         plugin.getServer().getScheduler().runTask(plugin, () -> {
             if (e.isCancelled()) return;
-            if (block.getType() == org.bukkit.Material.NOTE_BLOCK) return;
             plugin.blocks().forget(location);
             if (dropCustom) {
                 location.add(0.5, 0.5, 0.5);
