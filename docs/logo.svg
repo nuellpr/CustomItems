@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="Logo CustomItems">
+  <defs>
+    <linearGradient id="sideL" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4856ff"/><stop offset="1" stop-color="#7c3aed"/>
+    </linearGradient>
+    <linearGradient id="sideR" x1="1" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#22d3ee"/><stop offset="1" stop-color="#2563eb"/>
+    </linearGradient>
+    <linearGradient id="top" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#67e8f9"/><stop offset="1" stop-color="#0891b2"/>
+    </linearGradient>
+    <filter id="glow" x="-150%" y="-150%" width="400%" height="400%">
+      <feGaussianBlur stdDeviation="12" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1024" height="1024" fill="#101014"/>
+
+  <!-- circular refresh arrows -->
+  <g fill="none" stroke="#22d3ee" stroke-width="22" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M300 300 C210 350 180 440 205 525"/>
+    <path d="M205 525 l-2 -52 m2 52 l48 -20"/>
+    <path d="M724 300 C814 350 844 440 819 525"/>
+    <path d="M819 525 l2 -52 m-2 52 l-48 -20"/>
+    <path d="M300 595 C210 545 180 455 205 370"/>
+    <path d="M205 370 l-2 52 m2 -52 l48 20"/>
+    <path d="M724 595 C814 545 844 455 819 370"/>
+    <path d="M819 370 l2 52 m-2 -52 l-48 20"/>
+  </g>
+
+  <!-- hexagonal cube -->
+  <g stroke-linejoin="round">
+    <polygon points="512,232 660,318 660,488 512,574 364,488 364,318" fill="#0a0a0f" stroke="#0f172a" stroke-width="10"/>
+    <polygon points="512,232 660,318 512,404 364,318" fill="url(#top)"/>
+    <polygon points="364,318 512,404 512,574 364,488" fill="url(#sideL)"/>
+    <polygon points="660,318 512,404 512,574 660,488" fill="url(#sideR)"/>
+    <g fill="none" stroke="#0b1220" stroke-width="9">
+      <path d="M512 232 L512 404 L512 574"/>
+      <path d="M364 318 L512 404 L660 318"/>
+      <path d="M364 488 L512 404 L660 488"/>
+      <path d="M430 275 L578 361"/>
+      <path d="M430 531 L578 445"/>
+    </g>
+    <g fill="none" stroke="#67e8f9" stroke-width="6" opacity=".85">
+      <path d="M512 246 L645 321"/>
+      <path d="M379 321 L512 246"/>
+    </g>
+  </g>
+
+  <!-- glowing core -->
+  <g filter="url(#glow)">
+    <rect x="492" y="384" width="40" height="40" rx="4" fill="#a5f3fc" transform="rotate(45 512 404)"/>
+    <g stroke="#67e8f9" stroke-width="6" stroke-linecap="round">
+      <path d="M512 356 v-18"/><path d="M512 470 v18"/>
+      <path d="M464 404 h-18"/><path d="M578 404 h18"/>
+      <path d="M478 370 l-13 -13"/><path d="M559 451 l13 13"/>
+      <path d="M546 370 l13 -13"/><path d="M465 451 l-13 13"/>
+    </g>
+  </g>
+
+  <!-- wordmark -->
+  <text x="512" y="800" text-anchor="middle" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="96" font-weight="800" letter-spacing="-2">
+    <tspan fill="#ffffff">Custom</tspan><tspan fill="#22d3ee">Items</tspan>
+  </text>
+</svg>

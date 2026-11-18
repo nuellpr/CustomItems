@@ -1,6 +1,26 @@
+<p align="center">
+  <img src="docs/logo.svg" alt="Logo CustomItems" width="320" />
+</p>
+
 # CustomItems
 
 Plugin Minecraft Paper seperti ItemsAdder: custom items, blocks, mobs, dan GUI menu dengan resource pack yang di-generate otomatis + webserver built-in. Pemain tinggal join, resource pack langsung diprompt.
+
+**Versi 0.8.5** · Paper 26.2 · Java 25 · Build tanpa Gradle (cukup JDK)
+
+## Daftar isi
+
+- [Fitur](#fitur)
+- [Kompatibilitas](#kompatibilitas)
+- [Install](#install)
+- [Perubahan 0.8.5](#perubahan-085)
+- [Konfigurasi](#konfigurasi)
+- [Perintah](#perintah)
+- [Tools](#tools)
+- [Build dari source](#build-dari-source)
+- [Catatan teknis](#catatan-teknis)
+
+Riwayat versi sebelumnya ada di bawah bagian Perubahan 0.8.5.
 
 ## Fitur
 
@@ -55,7 +75,7 @@ Tiga hal yang perlu diketahui:
 
 ## Install
 
-1. Download `CustomItems-0.8.5.jar` dari [Releases](../../releases), taruh di folder `plugins/`
+1. Download `CustomItems-0.8.5.jar` dari [Releases](https://github.com/nuellpr/CustomItems/releases), taruh di folder `plugins/`
 2. Start server → folder `plugins/CustomItems/` tergenerate; tekstur bawaan Ruby Sword, Marble Block, admin, dan smile ikut disalin otomatis ke `textures/`
 3. Untuk server online: **wajib** set `external-url` di `config.yml` ke IP/URL publik (mis. `http://play.myserver.com:8077`) dan buka port-nya. Kalau dibiarkan kosong, plugin memakai bind IP server dan hanya berfungsi untuk pemain di mesin yang sama — URL `http://0.0.0.0:8077` tidak bisa di-download client.
 4. `/ci reload`
@@ -66,6 +86,7 @@ Tiga hal yang perlu diketahui:
 |---|---|
 | Model item dinamis | Oraxen importer membaca model tarik bow/crossbow, model crossbow terisi, perisai saat block, dan fishing rod saat cast. ItemsAdder importer mendeteksi file model saudara dengan suffix standar (`_0`–`_2`, `_charged`, `_firework`, `_blocking`, `_cast`). Resource pack memakai kondisi item 26.2, jadi model berubah mengikuti aksi pemain. |
 | Armor custom saat dikenakan | ItemsAdder `armors_rendering` diterjemahkan menjadi equipment definition dan tekstur armor humanoid. Oraxen importer mengenali pasangan tekstur `*_armor_layer_1.png` / `*_armor_layer_2.png` jika hanya ada satu set di folder armor. Item hasil impor menerima komponen equipment Paper. |
+| Ketahanan & validasi | Sepuluh perbaikan audit: `test-pack` memeriksa `imports/*.yml` dan menjalankan 8 verifier offline; HP mob tidak reset saat chunk dimuat ulang; pack gagal langsung menonaktifkan plugin; rank dihitung di main thread; `placed-blocks.txt` memakai UUID world (marker lama + BOM tetap dibaca); drop furniture aman walau hitbox hilang; urutan komponen item diperbaiki; `setup-server` memilih JAR terbaru. |
 
 ## Perubahan 0.8.4
 
@@ -102,17 +123,6 @@ Tiga hal yang perlu diketahui:
 | Pembacaan aset | File texture dan OGG hanya dimasukkan jika berada di dalam direktori aset plugin, termasuk pemeriksaan symlink. Glyph rank/emoji tetap terikat ke indeksnya selama chat yang sedang diproses ketika `/ci reload` berlangsung. |
 
 Pada migrasi dari 0.8.0, jangan hapus `block-states.yml` atau `placed-blocks.txt`. File pertama menjaga pasangan state lama; file kedua membedakan custom block dari noteblock vanilla. Jika registry state rusak atau tidak dapat disimpan, plugin menonaktifkan custom block dan meminta pemulihan backup daripada memakai ulang ID blok yang mungkin sudah ada di dunia.
-
-## Perubahan 0.3.0 (perbaikan bug)
-
-| Bug | Gejala | Perbaikan |
-|---|---|---|
-| Noteblock vanilla jadi tak terlihat | Resource pack menimpa `blockstates/note_block.json` dengan 1150 varian `instrument=...,note=...` **tanpa** variant `""`. `""` itu fallback yang dipakai client saat tidak ada key yang cocok; tanpanya, tidak ada noteblock yang match dan semua kehilangan model | **`0.4.0`** menghapus override-nya. **`0.8.0`** memperbaikinya: custom block benar-benar me-override blockstate — dengan tetap menyertakan `""` sebagai fallback |
-| Seluruh teks server rusak jadi kotak | `font/default.json` ditulis ulang tanpa referensi font vanilla, padahal resource pack **mengganti** file itu, bukan menggabungkannya | Referensi `include/space`, `include/default`, `include/unifont` ditambahkan kembali |
-| Custom block tidak bisa di-break | Block identity disimpan ke `TileState`, tapi noteblock **tidak punya block entity** — PDC tidak pernah tersimpan, jadi block tidak dikenali dan drop item gagal | Identity dibaca dari blockstate `instrument+note` |
-| Pack URL `http://0.0.0.0:8077` | Client tidak bisa mengunduh pack | `0.0.0.0`/`::` diganti loopback + warning, trailing slash dan `/pack.zip` ganda dinormalkan |
-| `/ci menu` crash | `createInventory` melempar error di atas 54 slot saat item+block > 54 | Ukuran dibatasi 54 + warning |
-| Build langsung dengan Java | Build sebelumnya memerlukan Gradle terpasang | Alat Java dari JDK mengompilasi dan mengemas plugin tanpa Gradle |
 
 ## Perubahan 0.8.0 (custom block sungguhan)
 
@@ -160,6 +170,17 @@ Pada migrasi dari 0.8.0, jangan hapus `block-states.yml` atau `placed-blocks.txt
 ### Aturan custom block
 
 Plugin menyimpan pasangan instrument/note per key di `plugins/CustomItems/block-states.yml`. Jangan hapus atau edit file itu setelah custom block dipasang di dunia. Key yang dihapus dari `blocks.yml` tetap menahan slotnya supaya blok lama tidak berubah menjadi jenis lain. `placed-blocks.txt` juga perlu masuk backup; file ini mencatat lokasi custom block dan membedakannya dari noteblock vanilla yang memiliki state sama.
+
+## Perubahan 0.3.0 (perbaikan bug)
+
+| Bug | Gejala | Perbaikan |
+|---|---|---|
+| Noteblock vanilla jadi tak terlihat | Resource pack menimpa `blockstates/note_block.json` dengan 1150 varian `instrument=...,note=...` **tanpa** variant `""`. `""` itu fallback yang dipakai client saat tidak ada key yang cocok; tanpanya, tidak ada noteblock yang match dan semua kehilangan model | **`0.4.0`** menghapus override-nya. **`0.8.0`** memperbaikinya: custom block benar-benar me-override blockstate — dengan tetap menyertakan `""` sebagai fallback |
+| Seluruh teks server rusak jadi kotak | `font/default.json` ditulis ulang tanpa referensi font vanilla, padahal resource pack **mengganti** file itu, bukan menggabungkannya | Referensi `include/space`, `include/default`, `include/unifont` ditambahkan kembali |
+| Custom block tidak bisa di-break | Block identity disimpan ke `TileState`, tapi noteblock **tidak punya block entity** — PDC tidak pernah tersimpan, jadi block tidak dikenali dan drop item gagal | Identity dibaca dari blockstate `instrument+note` |
+| Pack URL `http://0.0.0.0:8077` | Client tidak bisa mengunduh pack | `0.0.0.0`/`::` diganti loopback + warning, trailing slash dan `/pack.zip` ganda dinormalkan |
+| `/ci menu` crash | `createInventory` melempar error di atas 54 slot saat item+block > 54 | Ukuran dibatasi 54 + warning |
+| Build langsung dengan Java | Build sebelumnya memerlukan Gradle terpasang | Alat Java dari JDK mengompilasi dan mengemas plugin tanpa Gradle |
 
 ## Konfigurasi
 
@@ -372,9 +393,9 @@ Semua alat bantu ada di `tools/CustomItemsTools.java` dan memakai JDK saja.
 
 | Tool | Fungsi |
 |---|---|
-| `test-pack` | **Validasi pack sebelum pemain mengunduhnya.** Mengecek varian noteblock, glyph vanilla, model, tekstur, dan kecocokan konfigurasi |
+| `test-pack` | **Validasi pack sebelum pemain mengunduhnya.** Mengecek varian noteblock, glyph vanilla, model, tekstur, dan kecocokan konfigurasi — termasuk semua `imports/*.yml` dan 8 verifier offline (exit 1 kalau ada yang gagal) |
 | `generate-textures` | Bikin placeholder pixel-art (`ruby_sword`, `marble_block`, `smile`) sesuai gaya rank tag yang ada |
-| `setup-server` | Siapkan server Paper sekali-pakai di folder terpisah. **Tidak menyentuh server produksi** |
+| `setup-server` | Siapkan server Paper sekali-pakai di folder terpisah. Tanpa `--jar`, memilih otomatis JAR plugin terbaru berdasarkan waktu modifikasi. **Tidak menyentuh server produksi** |
 | `rcon` | Client RCON minimal untuk menjalankan perintah `/ci` |
 | `build` | Kompilasi plugin dan buat JAR release dengan compiler dan API JDK |
 
