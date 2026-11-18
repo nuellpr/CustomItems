@@ -6,13 +6,14 @@
 
 Plugin Minecraft Paper seperti ItemsAdder: custom items, blocks, mobs, dan GUI menu dengan resource pack yang di-generate otomatis + webserver built-in. Pemain tinggal join, resource pack langsung diprompt.
 
-**Versi 0.8.5** · Paper 26.2 · Java 25 · Build tanpa Gradle (cukup JDK)
+**Versi 0.8.6** · Paper 26.2 · Java 25 · Build tanpa Gradle (cukup JDK)
 
 ## Daftar isi
 
 - [Fitur](#fitur)
 - [Kompatibilitas](#kompatibilitas)
 - [Install](#install)
+- [Perubahan 0.8.6](#perubahan-086)
 - [Perubahan 0.8.5](#perubahan-085)
 - [Konfigurasi](#konfigurasi)
 - [Perintah](#perintah)
@@ -20,7 +21,7 @@ Plugin Minecraft Paper seperti ItemsAdder: custom items, blocks, mobs, dan GUI m
 - [Build dari source](#build-dari-source)
 - [Catatan teknis](#catatan-teknis)
 
-Riwayat versi sebelumnya ada di bawah bagian Perubahan 0.8.5.
+Riwayat versi sebelumnya ada di bawah bagian Perubahan 0.8.6.
 
 ## Fitur
 
@@ -75,10 +76,17 @@ Tiga hal yang perlu diketahui:
 
 ## Install
 
-1. Download `CustomItems-0.8.5.jar` dari [Releases](https://github.com/nuellpr/CustomItems/releases), taruh di folder `plugins/`
+1. Download `CustomItems-0.8.6.jar` dari [Releases](https://github.com/nuellpr/CustomItems/releases), taruh di folder `plugins/`
 2. Start server → folder `plugins/CustomItems/` tergenerate; tekstur bawaan Ruby Sword, Marble Block, admin, dan smile ikut disalin otomatis ke `textures/`
 3. Untuk server online: **wajib** set `external-url` di `config.yml` ke IP/URL publik (mis. `http://play.myserver.com:8077`) dan buka port-nya. Kalau dibiarkan kosong, plugin memakai bind IP server dan hanya berfungsi untuk pemain di mesin yang sama — URL `http://0.0.0.0:8077` tidak bisa di-download client.
 4. `/ci reload`
+
+## Perubahan 0.8.6
+
+| Perubahan | Detail |
+|---|---|
+| Ketahanan & validasi | Sepuluh perbaikan audit: `test-pack` memeriksa `imports/*.yml` dan menjalankan 8 verifier offline; HP mob tidak reset saat chunk dimuat ulang; pack gagal langsung menonaktifkan plugin; rank dihitung di main thread; `placed-blocks.txt` memakai UUID world (marker lama + BOM tetap dibaca); drop furniture aman walau hitbox hilang; urutan komponen item diperbaiki; `setup-server` memilih JAR terbaru berdasarkan waktu modifikasi. |
+| Dokumentasi | README dirapikan (daftar isi, logo, riwayat versi kronologis) dan logo vektor `docs/logo.svg` ditambahkan. |
 
 ## Perubahan 0.8.5
 
@@ -86,7 +94,6 @@ Tiga hal yang perlu diketahui:
 |---|---|
 | Model item dinamis | Oraxen importer membaca model tarik bow/crossbow, model crossbow terisi, perisai saat block, dan fishing rod saat cast. ItemsAdder importer mendeteksi file model saudara dengan suffix standar (`_0`–`_2`, `_charged`, `_firework`, `_blocking`, `_cast`). Resource pack memakai kondisi item 26.2, jadi model berubah mengikuti aksi pemain. |
 | Armor custom saat dikenakan | ItemsAdder `armors_rendering` diterjemahkan menjadi equipment definition dan tekstur armor humanoid. Oraxen importer mengenali pasangan tekstur `*_armor_layer_1.png` / `*_armor_layer_2.png` jika hanya ada satu set di folder armor. Item hasil impor menerima komponen equipment Paper. |
-| Ketahanan & validasi | Sepuluh perbaikan audit: `test-pack` memeriksa `imports/*.yml` dan menjalankan 8 verifier offline; HP mob tidak reset saat chunk dimuat ulang; pack gagal langsung menonaktifkan plugin; rank dihitung di main thread; `placed-blocks.txt` memakai UUID world (marker lama + BOM tetap dibaca); drop furniture aman walau hitbox hilang; urutan komponen item diperbaiki; `setup-server` memilih JAR terbaru. |
 
 ## Perubahan 0.8.4
 
@@ -415,7 +422,7 @@ Kode keluar `0` = pack lolos validasi, `1` = ada masalah, `2` = pemakaian/perint
 java tools/CustomItemsTools.java build --libraries "/path/to/paper/libraries"
 ```
 
-Butuh JDK 25 dan folder `libraries` dari server Paper 26.2 (harus berisi `paper-api` serta library dependensinya). Hasilnya di `build/libs/CustomItems-0.8.5.jar`, termasuk tekstur bawaan yang disalin otomatis ke folder data plugin pada startup pertama. Bisa juga diberikan classpath secara langsung lewat `--classpath` atau environment variable `PAPER_CLASSPATH`.
+Butuh JDK 25 dan folder `libraries` dari server Paper 26.2 (harus berisi `paper-api` serta library dependensinya). Hasilnya di `build/libs/CustomItems-0.8.6.jar`, termasuk tekstur bawaan yang disalin otomatis ke folder data plugin pada startup pertama. Bisa juga diberikan classpath secara langsung lewat `--classpath` atau environment variable `PAPER_CLASSPATH`.
 
 Untuk membuat server Paper uji terpisah, gunakan `java tools/CustomItemsTools.java setup-server --paper-jar "path/to/paper.jar"`. Metadata plugin (`plugin.yml`), konfigurasi YAML, dan aset PNG/OGG tetap memakai format yang diwajibkan Paper/resource pack; seluruh kode plugin dan alat yang bisa dieksekusi ditulis dalam Java.
 
