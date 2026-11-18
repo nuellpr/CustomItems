@@ -28,7 +28,7 @@ public final class FurnitureListener implements Listener {
     private final CustomItemsPlugin plugin;
     private final NamespacedKey itemKey;
     private final NamespacedKey pairKey;
-    private final Set<UUID> pendingBreaks = new HashSet<>();
+    private final Set<String> pendingBreaks = new HashSet<>();
 
     public FurnitureListener(CustomItemsPlugin plugin) {
         this.plugin = plugin;
@@ -106,17 +106,16 @@ public final class FurnitureListener implements Listener {
         Entity attacked = event.getAttacked();
         if (!event.willAttack()) return;
         String pair = attacked.getPersistentDataContainer().get(pairKey, PersistentDataType.STRING);
-        if (pair == null || !pendingBreaks.add(attacked.getUniqueId())) return;
+        Player player = event.getPlayer();
+        if (pair == null || !pendingBreaks.add(pair)) return;
 
         String item = attacked.getPersistentDataContainer().get(itemKey, PersistentDataType.STRING);
         Location dropLocation = attacked.getLocation().clone().add(0, 0.25, 0);
-        Player player = event.getPlayer();
         plugin.getServer().getScheduler().runTask(plugin, () -> {
-            pendingBreaks.remove(attacked.getUniqueId());
-            if (!attacked.isValid()) return;
+            pendingBreaks.remove(pair);
 
             ItemStack drop = null;
-            for (Entity entity : attacked.getWorld().getNearbyEntities(dropLocation, 4, 4, 4)) {
+            for (Entity entity : dropLocation.getWorld().getNearbyEntities(dropLocation, 4, 4, 4)) {
                 if (!pair.equals(entity.getPersistentDataContainer().get(pairKey, PersistentDataType.STRING))) continue;
                 if (entity instanceof ArmorStand stand && stand.getEquipment().getHelmet() != null) {
                     drop = stand.getEquipment().getHelmet().clone();

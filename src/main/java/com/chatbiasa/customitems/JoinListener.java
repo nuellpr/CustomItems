@@ -23,6 +23,7 @@ public final class JoinListener implements Listener {
 
     @EventHandler
     public void onJoin(PlayerJoinEvent event) {
+        plugin.ranks().refresh(event.getPlayer());
         migratePlayer(plugin, event.getPlayer());
         send(plugin, event.getPlayer());
     }
@@ -41,6 +42,7 @@ public final class JoinListener implements Listener {
 
     public static void migrateOnline(CustomItemsPlugin plugin) {
         for (org.bukkit.entity.Player player : plugin.getServer().getOnlinePlayers()) {
+            plugin.ranks().refresh(player);
             migratePlayer(plugin, player);
         }
     }

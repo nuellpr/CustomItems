@@ -273,15 +273,6 @@ public final class Items {
 
     public ItemStack stack(ItemDef def) {
         ItemStack s = ItemStack.of(def.base());
-        s.setData(DataComponentTypes.ITEM_MODEL, new NamespacedKey(plugin, def.key()));
-        s.setData(DataComponentTypes.CUSTOM_NAME, def.name());
-        if (!def.lore().isEmpty()) {
-            s.setData(DataComponentTypes.LORE, ItemLore.lore(def.lore()));
-        }
-        s.editPersistentDataContainer(pdc -> pdc.set(idKey, PersistentDataType.STRING, def.key()));
-        if (def.armorModel() != null) {
-            s.setData(DataComponentTypes.EQUIPPABLE, withArmorModel(s, def));
-        }
         if (hasAttributes(def)) {
             ItemMeta meta = s.getItemMeta();
             // Adding an explicit modifier component replaces the material defaults, so copy them
@@ -291,6 +282,15 @@ public final class Items {
             addModifier(meta, def, Attribute.ARMOR, def.armorBonus(), "armor", armorSlot(def.base()));
             addModifier(meta, def, Attribute.ATTACK_SPEED, def.attackSpeedBonus(), "attack_speed", EquipmentSlotGroup.MAINHAND);
             s.setItemMeta(meta);
+        }
+        s.setData(DataComponentTypes.ITEM_MODEL, new NamespacedKey(plugin, def.key()));
+        s.setData(DataComponentTypes.CUSTOM_NAME, def.name());
+        if (!def.lore().isEmpty()) {
+            s.setData(DataComponentTypes.LORE, ItemLore.lore(def.lore()));
+        }
+        s.editPersistentDataContainer(pdc -> pdc.set(idKey, PersistentDataType.STRING, def.key()));
+        if (def.armorModel() != null) {
+            s.setData(DataComponentTypes.EQUIPPABLE, withArmorModel(s, def));
         }
         return s;
     }

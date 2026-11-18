@@ -39,7 +39,10 @@ public final class CustomItemsPlugin extends JavaPlugin {
         try {
             pack.build();
         } catch (Exception e) {
-            getLogger().severe("Failed to build resource pack: " + e.getMessage());
+            getLogger().severe("Failed to build resource pack: " + e.getMessage()
+                    + ". Fix the resource pack config and restart the server; CustomItems is disabled.");
+            getServer().getPluginManager().disablePlugin(this);
+            return;
         }
         try {
             refreshPackServer();

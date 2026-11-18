@@ -5,6 +5,8 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
@@ -363,7 +365,8 @@ public final class CustomItemsTools {
                 String fileName = safeFileName(data.namespace() + "_" + relativeConfig.replace('/', '_'));
                 Path importedFile = output.resolve("imports").resolve(fileName);
                 if (Files.exists(importedFile)) throw new IOException("import already exists; remove it first to replace: " + importedFile);
-                report.assets += copyItemsAdderAssets(zip, contentRoot, data.namespace(), output.resolve("pack-assets/assets"));
+                report.assets += copyItemsAdderAssets(zip, contentRoot, data.namespace(), output.resolve("pack-assets/assets"),
+                        itemsAdderDuplicateTextures(zip, contentRoot, data));
                 Set<String> armorModels = writeItemsAdderArmorModels(zip, contentRoot, data,
                         output.resolve("pack-assets/assets"), report);
 
@@ -376,14 +379,14 @@ public final class CustomItemsTools {
                     Path modelFile = item.model() == null ? null
                             : importedModelPath(output.resolve("pack-assets/assets"), item.model());
                     String texturePath = item.texture() == null ? null : withPngExtension(item.texture());
-                    String textureFile = texturePath == null ? null : output.resolve("pack-assets/assets")
-                            .resolve(data.namespace()).resolve("textures").resolve(texturePath).normalize().toString();
+                    ZipEntry textureEntry = item.model() == null
+                            ? findItemsAdderTexture(zip, contentRoot, data.namespace(), texturePath) : null;
                     if (item.model() != null && !modelAvailable(output.resolve("pack-assets/assets"), item.model())) {
                         report.skip(item.key() + ": ItemsAdder model not found (" + modelFile + ")");
                         continue;
                     }
-                    if (item.model() == null && (textureFile == null || !Files.isRegularFile(Path.of(textureFile)))) {
-                        report.skip(item.key() + ": ItemsAdder texture not found (" + textureFile + ")");
+                    if (item.model() == null && textureEntry == null) {
+                        report.skip(item.key() + ": ItemsAdder texture not found (" + texturePath + ")");
                         continue;
                     }
                     generated.append("  ").append(item.key()).append(":\n")
@@ -397,8 +400,7 @@ public final class CustomItemsTools {
                         appendModelStates(generated, states, data.namespace());
                     } else {
                         String destination = "imported/itemsadder/" + data.namespace() + "/" + item.key() + ".png";
-                        copyZipEntry(zip, findItemsAdderTexture(zip, contentRoot, data.namespace(), texturePath),
-                                output.resolve("textures").resolve(destination));
+                        copyZipEntry(zip, textureEntry, output.resolve("textures").resolve(destination));
                         generated.append("    texture: ").append(yamlString(destination)).append('\n');
                     }
                     if (item.textureCount() > 1) report.note(item.key()
@@ -660,7 +662,40 @@ public final class CustomItemsTools {
         }
     }
 
-    private static int copyItemsAdderAssets(ZipFile zip, String contentRoot, String namespace, Path output) throws IOException {
+    /** Raw textures that are re-copied elsewhere and no model JSON refers to by filename. */
+    private static Set<String> itemsAdderDuplicateTextures(ZipFile zip, String contentRoot, ItemsAdderData data)
+            throws IOException {
+        Set<String> reused = new HashSet<>();
+        for (ItemsAdderItem item : data.items()) {
+            if (item.model() != null || item.texture() == null) continue;
+            ZipEntry texture = findItemsAdderTexture(zip, contentRoot, data.namespace(), withPngExtension(item.texture()));
+            if (texture != null) reused.add(texture.getName());
+        }
+        for (ArmorRendering armor : data.armors()) {
+            for (String layer : List.of(armor.layer1(), armor.layer2())) {
+                if (layer == null) continue;
+                ZipEntry texture = findItemsAdderTexture(zip, contentRoot, data.namespace(), withPngExtension(layer));
+                if (texture != null) reused.add(texture.getName());
+            }
+        }
+        if (reused.isEmpty()) return reused;
+        StringBuilder models = new StringBuilder();
+        for (ZipEntry entry : zip.stream().toList()) {
+            if (!entry.getName().toLowerCase(Locale.ROOT).endsWith(".json")) continue;
+            try (InputStream in = zip.getInputStream(entry)) {
+                models.append(new String(in.readAllBytes(), StandardCharsets.UTF_8));
+            }
+        }
+        String json = models.toString();
+        reused.removeIf(name -> {
+            String file = name.substring(name.lastIndexOf('/') + 1);
+            return json.contains(file.substring(0, file.length() - 4));
+        });
+        return reused;
+    }
+
+    private static int copyItemsAdderAssets(ZipFile zip, String contentRoot, String namespace, Path output,
+                                            Set<String> skippedEntries) throws IOException {
         Set<String> prefixes = new LinkedHashSet<>(List.of(
                 contentRoot + "resourcepack/assets/",
                 contentRoot + "assets/",
@@ -669,7 +704,7 @@ public final class CustomItemsTools {
         int copied = 0;
         for (ZipEntry entry : zip.stream().sorted(Comparator.comparing(ZipEntry::getName)).toList()) {
             String name = entry.getName().replace('\\', '/');
-            if (entry.isDirectory()) continue;
+            if (entry.isDirectory() || skippedEntries.contains(entry.getName())) continue;
             String relative = null;
             for (String prefix : prefixes) {
                 if (!name.startsWith(prefix)) continue;
@@ -1259,6 +1294,7 @@ public final class CustomItemsTools {
         checkBlockModels(names, report);
         checkFont(contents.get("assets/minecraft/font/default.json"), names, report);
         if (configDir != null) checkConfig(configDir, names, report);
+        runVerifiers(report);
 
         report.head("result");
         if (report.failures == 0) {
@@ -1266,6 +1302,54 @@ public final class CustomItemsTools {
         } else {
             System.out.println("  " + report.failures + " FAILURE(S), " + report.warnings + " warning(s)");
             System.exit(1);
+        }
+    }
+
+    /** Compile and run the offline assertion checks against the real compiled plugin classes. */
+    private static void runVerifiers(Report report) {
+        Path root = root();
+        Path out = root.resolve("build/tool-verify-classes");
+        try {
+            Path classes = root.resolve("build/classes");
+            if (!Files.isDirectory(classes)) throw new IllegalStateException("run `build` first");
+            List<Path> classpath = new ArrayList<>();
+            classpath.add(classes);
+            classpath.addAll(buildClasspath(root, new Options(new String[0], 0)));
+            String cp = String.join(System.getProperty("path.separator"),
+                    classpath.stream().map(Path::toAbsolutePath).map(Path::toString).toList());
+            JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+            if (compiler == null) throw new IllegalStateException("a JDK is required");
+            Files.createDirectories(out);
+            List<Path> sources;
+            try (Stream<Path> files = Files.list(root.resolve("tools/verify"))) {
+                sources = files.filter(p -> p.toString().endsWith(".java")).sorted().toList();
+            }
+            DiagnosticCollector<javax.tools.JavaFileObject> diagnostics = new DiagnosticCollector<>();
+            try (StandardJavaFileManager manager = compiler.getStandardFileManager(diagnostics, null, StandardCharsets.UTF_8)) {
+                List<String> args = new ArrayList<>(List.of("-encoding", "UTF-8", "--release", "25",
+                        "-d", out.toString(), "-classpath", cp));
+                Iterable<? extends javax.tools.JavaFileObject> units = manager.getJavaFileObjectsFromPaths(sources);
+                if (!compiler.getTask(null, manager, diagnostics, args, null, units).call())
+                    throw new IllegalStateException("verifier compilation failed: " + diagnostics.getDiagnostics());
+            }
+            List<URL> urls = new ArrayList<>();
+            urls.add(out.toUri().toURL());
+            for (Path entry : classpath) urls.add(entry.toUri().toURL());
+            try (URLClassLoader loader = new URLClassLoader(urls.toArray(URL[]::new), null)) {
+                for (String name : List.of("VerifyPack", "VerifyInstrumentRoundTrip", "VerifyRankCache", "VerifyPlacedBlocks", "VerifyFurnitureBreak", "VerifyItemComponents", "VerifyRconResponseId", "VerifyReviewFixes")) {
+                    try {
+                        Class.forName(name, true, loader).getMethod("main", String[].class)
+                                .invoke(null, (Object) new String[0]);
+                        report.ok("offline verifier " + name + " passed");
+                    } catch (java.lang.reflect.InvocationTargetException e) {
+                        Throwable cause = e.getCause();
+                        report.bad("offline verifier " + name + " failed: "
+                                + (cause == null ? e.toString() : cause.toString()));
+                    }
+                }
+            }
+        } catch (Exception e) {
+            report.bad("offline verifiers could not run: " + e.getMessage());
         }
     }
 
@@ -1382,19 +1466,49 @@ public final class CustomItemsTools {
         }
         report.head("config vs pack (" + configDir + ")");
         Path textureDir = configDir.resolve("textures");
-        Path items = configDir.resolve("items.yml");
-        if (Files.isRegularFile(items)) {
+        List<Path> itemFiles = new ArrayList<>();
+        itemFiles.add(configDir.resolve("items.yml"));
+        Path imports = configDir.resolve("imports");
+        if (Files.isDirectory(imports)) {
+            try (Stream<Path> files = Files.list(imports)) {
+                files.filter(Files::isRegularFile).filter(p -> p.toString().endsWith(".yml")).sorted().forEach(itemFiles::add);
+            }
+        }
+        for (Path items : itemFiles) {
+            if (!Files.isRegularFile(items)) continue;
             boolean inSection = false;
+            int keyIndent = -1;
+            String current = null;
+            List<String> keys = new ArrayList<>();
+            Map<String, String> models = new LinkedHashMap<>();
             for (String line : Files.readAllLines(items)) {
-                if (line.matches("^\\s*items:\\s*$")) { inSection = true; continue; }
-                if (!inSection || !line.matches("^ {2}[^\\s:#]+:\\s*$")) continue;
-                String key = line.strip().replaceFirst(":\\s*$", "");
+                if (line.matches("^\\s*items:\\s*$")) { inSection = true; keyIndent = -1; continue; }
+                if (!inSection || line.isBlank() || line.stripLeading().startsWith("#")) continue;
+                Matcher model = Pattern.compile("^\\s+model:\\s*\"?([^\"\\s]+)\"?\\s*$").matcher(line);
+                if (model.matches()) {
+                    if (current != null) models.put(current, model.group(1));
+                    continue;
+                }
+                Matcher keyLine = Pattern.compile("^( +)[^\\s:#]+:\\s*$").matcher(line);
+                if (!keyLine.matches()) continue;
+                int indent = keyLine.group(1).length();
+                if (keyIndent < 0) keyIndent = indent;
+                if (indent != keyIndent) continue;
+                current = line.strip().replaceFirst(":\\s*$", "");
+                keys.add(current);
+            }
+            for (String key : keys) {
                 String definition = names.stream().filter(n -> n.matches("^assets/([^/]+)/items/" + Pattern.quote(key) + "\\.json$"))
                         .findFirst().orElse(null);
                 if (definition != null) {
                     String namespace = definition.replaceFirst("^assets/([^/]+)/items/.*$", "$1");
-                    if (names.contains("assets/" + namespace + "/textures/item/" + key + ".png")) report.ok("item " + key + " model and texture packed");
-                    else report.bad("item " + key + " texture is not in pack - run /ci reload");
+                    boolean textured = names.contains("assets/" + namespace + "/textures/item/" + key + ".png");
+                    String modelRef = models.get(key);
+                    boolean modelled = modelRef != null && modelRef.contains(":")
+                            && names.contains("assets/" + modelRef.substring(0, modelRef.indexOf(':'))
+                                    + "/models/" + modelRef.substring(modelRef.indexOf(':') + 1) + ".json");
+                    if (textured || modelled) report.ok("item " + key + " model and texture packed");
+                    else report.bad("item " + key + " texture or model is not in pack - run /ci reload");
                 } else if (Files.isRegularFile(textureDir.resolve(key + ".png"))) {
                     report.bad("item " + key + " model/texture exists on disk but is NOT in pack - run /ci reload");
                 } else report.bad("item " + key + " texture missing: " + textureDir.resolve(key + ".png"));
@@ -1407,7 +1521,7 @@ public final class CustomItemsTools {
     private static void checkNamedTextures(Path file, String kind, Set<String> names, Report report) throws IOException {
         if (!Files.isRegularFile(file)) return;
         for (String line : Files.readAllLines(file)) {
-            if (!line.matches("^ {2}[^\\s:#]+:\\s*$")) continue;
+            if (!line.matches("^ {2,}[^\\s:#]+:\\s*$")) continue;
             String key = line.strip().replaceFirst(":\\s*$", "");
             String resource = "assets/minecraft/textures/font/" + kind + "_" + key + ".png";
             if (names.contains(resource)) report.ok(kind + " " + key + " packed");
@@ -1419,7 +1533,7 @@ public final class CustomItemsTools {
         Path root = root();
         Path serverRoot = Path.of(options.get("root", root.getParent().resolve(".mc-test").toString())).toAbsolutePath().normalize();
         Path paper = options.get("paper-jar", null) == null ? findPaperJar(root) : Path.of(options.get("paper-jar", null));
-        Path plugin = Path.of(options.get("jar", root.resolve("releases/CustomItems-0.4.0.jar").toString()));
+        Path plugin = options.get("jar", null) == null ? findLatestPluginJar(root) : Path.of(options.get("jar", ""));
         if (paper == null || !Files.isRegularFile(paper)) throw new IllegalArgumentException("Paper jar not found; pass --paper-jar <path>");
         if (!Files.isRegularFile(plugin)) throw new IllegalArgumentException("plugin jar not found: " + plugin + " (build it first)");
         int port = Integer.parseInt(options.get("port", "25698"));
@@ -1464,22 +1578,28 @@ public final class CustomItemsTools {
                 + "\" --config-dir \"" + data + "\"");
     }
 
+    private static Path findLatestPluginJar(Path root) throws IOException {
+        List<Path> jars = new ArrayList<>();
+        for (String dir : List.of("build/libs", "releases")) {
+            Path folder = root.resolve(dir);
+            if (!Files.isDirectory(folder)) continue;
+            try (Stream<Path> files = Files.list(folder)) {
+                files.filter(Files::isRegularFile)
+                        .filter(p -> p.getFileName().toString().matches("CustomItems-\\d+(?:\\.\\d+)*\\.jar"))
+                        .forEach(jars::add);
+            }
+        }
+        return jars.stream().max(Comparator.comparingLong(p -> {
+            try { return Files.getLastModifiedTime(p).toMillis(); }
+            catch (IOException e) { return 0L; }
+        })).orElseThrow(() -> new IllegalArgumentException("no plugin jar found; pass --jar"));
+    }
+
     private static Path findPaperJar(Path root) throws IOException {
         Path local = root.resolve(".tmp-api/paper-server.jar");
         if (Files.isRegularFile(local)) return local;
-        Path desktop = Path.of(System.getProperty("user.home"), "Desktop");
-        Path legacy = desktop.resolve("ARCANIA SERVER/paper-26.2-129.jar");
-        if (Files.isRegularFile(legacy)) return legacy;
-        if (!Files.isDirectory(desktop)) return null;
-        try (Stream<Path> dirs = Files.list(desktop)) {
-            for (Path dir : dirs.filter(Files::isDirectory).toList()) {
-                try (Stream<Path> jars = Files.list(dir)) {
-                    Path found = jars.filter(p -> p.getFileName().toString().matches("paper-26.*\\.jar$"))
-                            .findFirst().orElse(null);
-                    if (found != null) return found;
-                }
-            }
-        }
+        Path testServer = root.getParent().resolve(".mc-test/paper.jar");
+        if (Files.isRegularFile(testServer)) return testServer;
         return null;
     }
 
@@ -1508,8 +1628,11 @@ public final class CustomItemsTools {
             System.out.println("[rcon] authenticated");
             int id = 2;
             for (String command : commands) {
-                sendPacket(out, id++, 2, command);
-                String body = readPacket(in).body;
+                int commandId = id++;
+                sendPacket(out, commandId, 2, command);
+                Packet response = readPacket(in);
+                if (response.id != commandId) throw new IOException("RCON response id mismatch: expected " + commandId + " got " + response.id);
+                String body = response.body;
                 System.out.println("\n> " + command);
                 System.out.println(body.isBlank() ? "  (no output)" : body.stripTrailing());
             }

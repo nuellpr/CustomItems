@@ -4,10 +4,12 @@ import org.bukkit.configuration.file.YamlConfiguration;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 
 public final class Ranks {
 
@@ -23,6 +25,8 @@ public final class Ranks {
      *  either throw ConcurrentModificationException or miss a rank. `next` is published only once
      *  fully built and is never mutated afterwards, so readers always see one complete snapshot. */
     private volatile Map<String, RankDef> ranks = new LinkedHashMap<>();
+    /** Resolved on the main thread at join/reload; AsyncChatEvent only reads this snapshot. */
+    private volatile Map<UUID, RankDef> byPlayer = new HashMap<>();
 
     public Ranks(CustomItemsPlugin plugin) {
         this.plugin = plugin;
@@ -55,6 +59,7 @@ public final class Ranks {
             }
         }
         ranks = next;
+        byPlayer = new HashMap<>();
         plugin.getLogger().info("Loaded " + next.size() + " rank tags");
     }
 
@@ -68,6 +73,19 @@ public final class Ranks {
             if (p.hasPermission("ci.rank." + def.key())) return def;
         }
         return null;
+    }
+
+    /** Main thread only: refresh one player's cached rank after join or reload. */
+    public void refresh(org.bukkit.entity.Player p) {
+        RankDef found = forPlayer(p);
+        Map<UUID, RankDef> next = new HashMap<>(byPlayer);
+        if (found == null) next.remove(p.getUniqueId());
+        else next.put(p.getUniqueId(), found);
+        byPlayer = next;
+    }
+
+    public RankDef cached(UUID id) {
+        return byPlayer.get(id);
     }
 
     /** chat glyph char, assigned in file order from the private use area */

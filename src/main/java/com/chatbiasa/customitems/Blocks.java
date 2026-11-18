@@ -24,6 +24,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.UUID;
 
 public final class Blocks {
 
@@ -291,7 +292,23 @@ public final class Blocks {
     }
 
     private static String coord(org.bukkit.Location l) {
-        return l.getWorld().getName() + "," + l.getBlockX() + "," + l.getBlockY() + "," + l.getBlockZ();
+        return l.getWorld().getUID() + "," + l.getBlockX() + "," + l.getBlockY() + "," + l.getBlockZ();
+    }
+
+    /** Convert a legacy world-name marker to the world UUID; null means it belongs to another world. */
+    static String migratedPlacedLine(String line, String worldName, UUID worldUuid) {
+        String trimmed = line.trim();
+        if (!trimmed.isEmpty() && trimmed.charAt(0) == '\uFEFF') trimmed = trimmed.substring(1);
+        String[] parts = trimmed.split(",", -1);
+        if (parts.length != 4) return null;
+        try {
+            UUID.fromString(parts[0]);
+            return trimmed;
+        } catch (IllegalArgumentException ignored) {
+            // legacy marker, fall through
+        }
+        if (!parts[0].equals(worldName)) return null;
+        return worldUuid + "," + parts[1] + "," + parts[2] + "," + parts[3];
     }
 
     public boolean isPlaced(org.bukkit.Location l) {
@@ -314,7 +331,19 @@ public final class Blocks {
         }
         try {
             for (String line : Files.readAllLines(placedFile.toPath(), StandardCharsets.UTF_8)) {
-                if (!line.isBlank()) placed.add(line.trim());
+                if (line.isBlank()) continue;
+                String migrated = null;
+                for (org.bukkit.World world : org.bukkit.Bukkit.getWorlds()) {
+                    migrated = migratedPlacedLine(line, world.getName(), world.getUID());
+                    if (migrated != null) break;
+                }
+                if (migrated == null) {
+                    plugin.getLogger().warning("Keeping unrecognised placed-block marker: " + line.trim());
+                    placed.add(line.trim());
+                    continue;
+                }
+                if (!migrated.equals(line.trim())) placedDirty = true;
+                placed.add(migrated);
             }
         } catch (IOException e) {
             plugin.getLogger().warning("Could not read placed-blocks.txt: " + e.getMessage());

@@ -19,7 +19,7 @@ public class ChatListener implements Listener {
 
     @EventHandler
     public void onChat(AsyncChatEvent event) {
-        Ranks.RankDef rank = plugin.ranks().forPlayer(event.getPlayer());
+        Ranks.RankDef rank = plugin.ranks().cached(event.getPlayer().getUniqueId());
         // replaceText edits the text nodes in place, so the player's own bold/italic/colour and any
         // click+hover components survive. A plain-text roundtrip here used to flatten all of them.
         Component msg = event.message();

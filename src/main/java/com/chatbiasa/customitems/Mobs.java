@@ -289,22 +289,26 @@ public final class Mobs implements Listener {
 
     public LivingEntity spawn(MobDef def, org.bukkit.Location location) {
         LivingEntity entity = (LivingEntity) location.getWorld().spawnEntity(location, def.type());
-        apply(entity, def);
+        applyOnSpawn(entity, def);
         entity.getPersistentDataContainer().set(plugin.mobKey(), PersistentDataType.STRING, def.key());
         return entity;
     }
 
-    private void apply(LivingEntity entity, MobDef def) {
+    /** Chunk loads re-apply attributes but must not heal a mob that was already damaged. */
+    private void reapply(LivingEntity entity, MobDef def) {
         entity.customName(def.name());
         entity.setCustomNameVisible(true);
         entity.setPersistent(true);
         var health = entity.getAttribute(Attribute.MAX_HEALTH);
-        if (health != null) {
-            health.setBaseValue(def.health());
-            entity.setHealth(def.health());
-        }
+        if (health != null) health.setBaseValue(def.health());
         var speed = entity.getAttribute(Attribute.MOVEMENT_SPEED);
         if (speed != null) speed.setBaseValue(def.speed());
+    }
+
+    private void applyOnSpawn(LivingEntity entity, MobDef def) {
+        reapply(entity, def);
+        var health = entity.getAttribute(Attribute.MAX_HEALTH);
+        if (health != null) entity.setHealth(Math.min(def.health(), health.getValue()));
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -361,7 +365,7 @@ public final class Mobs implements Listener {
         for (var entity : event.getChunk().getEntities()) {
             if (entity instanceof LivingEntity living) {
                 MobDef def = customMob(living);
-                if (def != null) apply(living, def);
+                if (def != null) reapply(living, def);
             }
         }
     }
