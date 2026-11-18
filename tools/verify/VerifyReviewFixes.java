@@ -15,6 +15,7 @@ public final class VerifyReviewFixes {
         check(tools.contains("object(Json.parse(text)).containsKey(\"variants\")"), "blockstate check must parse JSON, not match a literal regex");
         check(tools.contains("--seed-from is not a directory"), "a missing --seed-from directory must error explicitly");
         check(!tools.contains("args[i].startsWith(\"--\")"), "option values starting with -- must be accepted");
+        check(tools.contains("['\\\"]?"), "checkConfig must accept single-quoted model refs");
 
         String blocks = Files.readString(Path.of(args[0], "src/main/java/com/chatbiasa/customitems/Blocks.java"));
         check(blocks.contains("placed.add(line.trim())"), "an unrecognised legacy marker must be kept, not dropped");
@@ -27,6 +28,7 @@ public final class VerifyReviewFixes {
         String packServer = Files.readString(Path.of(base + "PackServer.java"));
         check(packServer.contains("hasPort"), "external-url with a port must not get a second port appended");
         check(packServer.contains("newFixedThreadPool(8"), "pack webserver pool must not stall under load");
+        check(packServer.contains("WATCHDOG.schedule(exchange::close"), "webserver must bound stalled requests with a timeout");
         String recipes = Files.readString(Path.of(base + "Recipes.java"));
         check(recipes.contains("ok = Bukkit.addRecipe(recipe)"), "recipes must only be tracked when addRecipe succeeds");
         String items = Files.readString(Path.of(base + "Items.java"));

@@ -6,13 +6,14 @@
 
 Plugin Minecraft Paper seperti ItemsAdder: custom items, blocks, mobs, dan GUI menu dengan resource pack yang di-generate otomatis + webserver built-in. Pemain tinggal join, resource pack langsung diprompt.
 
-**Versi 0.8.7** · Paper 26.2 · Java 25 · Build tanpa Gradle (cukup JDK)
+**Versi 0.8.8** · Paper 26.2 · Java 25 · Build tanpa Gradle (cukup JDK)
 
 ## Daftar isi
 
 - [Fitur](#fitur)
 - [Kompatibilitas](#kompatibilitas)
 - [Install](#install)
+- [Perubahan 0.8.8](#perubahan-088)
 - [Perubahan 0.8.7](#perubahan-087)
 - [Perubahan 0.8.6](#perubahan-086)
 - [Perubahan 0.8.5](#perubahan-085)
@@ -22,7 +23,7 @@ Plugin Minecraft Paper seperti ItemsAdder: custom items, blocks, mobs, dan GUI m
 - [Build dari source](#build-dari-source)
 - [Catatan teknis](#catatan-teknis)
 
-Riwayat versi sebelumnya ada di bawah bagian Perubahan 0.8.7.
+Riwayat versi sebelumnya ada di bawah bagian Perubahan 0.8.8.
 
 ## Fitur
 
@@ -77,10 +78,17 @@ Tiga hal yang perlu diketahui:
 
 ## Install
 
-1. Download `CustomItems-0.8.7.jar` dari [Releases](https://github.com/nuellpr/CustomItems/releases), taruh di folder `plugins/`
+1. Download `CustomItems-0.8.8.jar` dari [Releases](https://github.com/nuellpr/CustomItems/releases), taruh di folder `plugins/`
 2. Start server → folder `plugins/CustomItems/` tergenerate; tekstur bawaan Ruby Sword, Marble Block, admin, dan smile ikut disalin otomatis ke `textures/`
 3. Untuk server online: **wajib** set `external-url` di `config.yml` ke IP/URL publik (mis. `http://play.myserver.com:8077`) dan buka port-nya. Kalau dibiarkan kosong, plugin memakai bind IP server dan hanya berfungsi untuk pemain di mesin yang sama — URL `http://0.0.0.0:8077` tidak bisa di-download client.
 4. `/ci reload`
+
+## Perubahan 0.8.8
+
+| Perubahan | Detail |
+|---|---|
+| Validasi & webserver | `checkConfig` menerima `model: 'ns:item'` dengan single quote (YAML valid); webserver pack memutus koneksi klien yang stalled setelah 30 detik lewat watchdog, bukan membiarkan thread menumpuk. |
+| Bukti runtime | Urutan komponen item (`setItemMeta` sebelum `ITEM_MODEL`/PDC) dibuktikan di server Paper nyata dengan item `damage:` + `model:` — model dan identitas item tetap ada. |
 
 ## Perubahan 0.8.7
 
@@ -433,7 +441,7 @@ Kode keluar `0` = pack lolos validasi, `1` = ada masalah, `2` = pemakaian/perint
 java tools/CustomItemsTools.java build --libraries "/path/to/paper/libraries"
 ```
 
-Butuh JDK 25 dan folder `libraries` dari server Paper 26.2 (harus berisi `paper-api` serta library dependensinya). Hasilnya di `build/libs/CustomItems-0.8.7.jar`, termasuk tekstur bawaan yang disalin otomatis ke folder data plugin pada startup pertama. Bisa juga diberikan classpath secara langsung lewat `--classpath` atau environment variable `PAPER_CLASSPATH`.
+Butuh JDK 25 dan folder `libraries` dari server Paper 26.2 (harus berisi `paper-api` serta library dependensinya). Hasilnya di `build/libs/CustomItems-0.8.8.jar`, termasuk tekstur bawaan yang disalin otomatis ke folder data plugin pada startup pertama. Bisa juga diberikan classpath secara langsung lewat `--classpath` atau environment variable `PAPER_CLASSPATH`.
 
 Untuk membuat server Paper uji terpisah, gunakan `java tools/CustomItemsTools.java setup-server --paper-jar "path/to/paper.jar"`. Metadata plugin (`plugin.yml`), konfigurasi YAML, dan aset PNG/OGG tetap memakai format yang diwajibkan Paper/resource pack; seluruh kode plugin dan alat yang bisa dieksekusi ditulis dalam Java.
 

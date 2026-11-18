@@ -14,8 +14,18 @@ import java.nio.channels.FileChannel;
 import java.nio.file.StandardOpenOption;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 public final class PackServer {
+
+    private static final ScheduledExecutorService WATCHDOG = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread thread = new Thread(r, "CustomItems-PackServer-Timeout");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private static final int REQUEST_TIMEOUT_SECONDS = 30;
 
     private final CustomItemsPlugin plugin;
     private HttpServer server;
@@ -63,6 +73,7 @@ public final class PackServer {
     }
 
     private void servePack(HttpExchange exchange) throws IOException {
+        ScheduledFuture<?> timeout = WATCHDOG.schedule(exchange::close, REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS);
         try {
             if (!"GET".equalsIgnoreCase(exchange.getRequestMethod())) {
                 exchange.sendResponseHeaders(405, -1);
@@ -86,6 +97,7 @@ public final class PackServer {
                 }
             }
         } finally {
+            timeout.cancel(false);
             exchange.close();
         }
     }

@@ -39,7 +39,7 @@ import javax.tools.ToolProvider;
 
 /** Small JDK-only build and maintenance tools for CustomItems. */
 public final class CustomItemsTools {
-    private static final String VERSION = "0.8.7";
+    private static final String VERSION = "0.8.8";
     private static final String[] MISSING_FONT_REFS = {
             "minecraft:include/space", "minecraft:include/default", "minecraft:include/unifont"
     };
@@ -1490,7 +1490,7 @@ public final class CustomItemsTools {
             for (String line : Files.readAllLines(items)) {
                 if (line.matches("^\\s*items:\\s*$")) { inSection = true; keyIndent = -1; continue; }
                 if (!inSection || line.isBlank() || line.stripLeading().startsWith("#")) continue;
-                Matcher model = Pattern.compile("^\\s+model:\\s*\"?([^\"\\s]+)\"?\\s*$").matcher(line);
+                Matcher model = Pattern.compile("^\\s+model:\\s*['\"]?([^'\"\\s]+)['\"]?\\s*$").matcher(line);
                 if (model.matches()) {
                     if (current != null) models.put(current, model.group(1));
                     continue;
